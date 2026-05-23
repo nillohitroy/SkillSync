@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
-import Footer from "@/components/Footer";
 import "./globals.css";
+import ConditionalFooter from "@/components/ConditionalFooter";
 
 const outfit = Outfit({ 
   subsets: ["latin"],
@@ -28,8 +28,7 @@ export default function RootLayout({
         <div className="flex-1">
           {children}
         </div>
-        
-        <Footer />
+        <ConditionalFooter />
       </body>
     </html>
   );
