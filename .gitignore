@@ -1,0 +1,7 @@
+.env
+.env.local
+alembic/__pycache__/
+alembic/versions/__pycache__/
+*.pyc
+backend/alembic/README
+backend/alembic/script.py.mako
