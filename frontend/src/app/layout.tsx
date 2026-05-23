@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
+import Footer from "@/components/Footer";
 import "./globals.css";
 
 const outfit = Outfit({ 
@@ -18,14 +19,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // 1. Add suppressHydrationWarning to the html tag
     <html lang="en" className="scroll-smooth" suppressHydrationWarning>
-      {/* 2. Add suppressHydrationWarning to the body tag */}
       <body 
-        className={`${outfit.variable} font-sans antialiased bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50`}
+        className={`${outfit.variable} font-sans antialiased bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 flex flex-col min-h-screen`}
         suppressHydrationWarning
       >
-        {children}
+        {/* The main content area expands to push the footer down if the page is short */}
+        <div className="flex-1">
+          {children}
+        </div>
+        
+        <Footer />
       </body>
     </html>
   );

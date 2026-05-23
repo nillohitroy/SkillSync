@@ -12,7 +12,7 @@ export default function Navbar() {
     setMounted(true);
     const savedTheme = localStorage.getItem("theme");
     const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    
+
     if (savedTheme === "dark" || (!savedTheme && systemDark)) {
       setIsDark(true);
       document.documentElement.classList.add("dark");
@@ -35,7 +35,7 @@ export default function Navbar() {
   return (
     <header className="fixed top-0 z-50 w-full border-b border-zinc-200/50 bg-zinc-50/80 backdrop-blur-xl transition-colors duration-300 dark:border-zinc-800/50 dark:bg-zinc-950/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        
+
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500 text-white shadow-lg shadow-teal-500/20 transition-transform group-hover:scale-105">
@@ -57,7 +57,7 @@ export default function Navbar() {
         {/* Actions */}
         <div className="flex items-center gap-4">
           {mounted && (
-            <button 
+            <button
               onClick={toggleTheme}
               className="rounded-full p-2 text-zinc-500 transition-all hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-800"
               aria-label="Toggle theme"
@@ -72,9 +72,9 @@ export default function Navbar() {
           <Link href="/login" className="hidden text-sm font-semibold text-zinc-900 dark:text-zinc-50 md:block hover:text-teal-500 dark:hover:text-teal-400 transition-colors">
             Log in
           </Link>
-          <button className="hidden rounded-lg bg-zinc-900 px-5 py-2 text-sm font-bold text-white transition-transform hover:scale-105 dark:bg-zinc-50 dark:text-zinc-900 md:block">
+          <Link href="/register" className="hidden rounded-lg bg-zinc-900 px-5 py-2 text-sm font-bold text-white transition-transform hover:scale-105 dark:bg-zinc-50 dark:text-zinc-900 md:block">
             Start Executing
-          </button>
+          </Link>
         </div>
       </div>
     </header>

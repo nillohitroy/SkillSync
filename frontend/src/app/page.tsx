@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createTimeline } from "animejs";
 import Navbar from "@/components/Navbar";
+import Link from "next/link";
 
 export default function LandingPage() {
   const heroRef = useRef<HTMLDivElement>(null);
@@ -23,7 +24,7 @@ export default function LandingPage() {
       ease: "outExpo",
       delay: (el: any, i: number) => i * 150,
     }, 200);
-    
+
     tl.add(capabilitiesRef.current, {
       opacity: [0, 1],
       y: [40, 0],
@@ -34,7 +35,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 transition-colors duration-300 dark:bg-zinc-950 dark:text-zinc-50 selection:bg-teal-500/30">
-      
+
       <Navbar />
 
       <div className="relative z-10">
@@ -48,25 +49,31 @@ export default function LandingPage() {
               </span>
               Hyperlocal Digital Marketplace
             </div>
-            
+
             <h1 className="animate-hero text-6xl font-black tracking-tight md:text-8xl mb-8">
-              Digital Execution <br/>
+              Digital Execution <br />
               <span className="text-teal-600 dark:text-teal-400">
                 Instantly & Affordably.
               </span>
             </h1>
-            
+
             <p className="animate-hero text-lg text-zinc-600 dark:text-zinc-400 md:text-2xl mb-12 max-w-3xl leading-relaxed font-medium">
               Bypass expensive agencies. SkillSync connects SMEs with verified, highly-skilled student talent for your routine digital, design, and tech tasks.
             </p>
-            
+
             <div className="animate-hero flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-center">
-              <button className="rounded-xl bg-teal-600 px-8 py-4 text-base font-bold text-white shadow-lg shadow-teal-500/20 transition-all hover:bg-teal-500 hover:shadow-teal-500/40 hover:-translate-y-0.5">
+              <Link
+                href="/login"
+                className="rounded-xl bg-teal-600 px-8 py-4 text-base font-bold text-white shadow-lg shadow-teal-500/20 transition-all hover:bg-teal-500 hover:shadow-teal-500/40 hover:-translate-y-0.5"
+              >
                 Post Work — It's Free
-              </button>
-              <button className="rounded-xl border-2 border-zinc-200 bg-zinc-50/50 px-8 py-4 text-base font-bold text-zinc-900 transition-all hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-50 dark:hover:bg-zinc-800">
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-xl border-2 border-zinc-200 bg-zinc-50/50 px-8 py-4 text-base font-bold text-zinc-900 transition-all hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-50 dark:hover:bg-zinc-800"
+              >
                 Apply as Student Talent
-              </button>
+              </Link>
             </div>
           </div>
         </main>
