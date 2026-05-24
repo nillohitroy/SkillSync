@@ -12,10 +12,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [actualRole, setActualRole] = useState<string | null>(null);
 
   // --- GATEKEEPER LOGIC ---
   useEffect(() => {
     const role = localStorage.getItem("role");
+    setActualRole(role);
     
     if (role !== "student") {
       setIsAuthorized(false);
@@ -33,15 +35,22 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
   // 2. Show 404 / Unauthorized if they fail the role check
   if (!isAuthorized) {
+    const isBusiness = actualRole === "sme";
+
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-6 text-center transition-colors duration-300">
         <h1 className="text-6xl font-black text-zinc-900 dark:text-zinc-50 mb-4">404</h1>
         <h2 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">Access Denied</h2>
         <p className="text-sm text-zinc-500 mb-6 max-w-md">
-          The page you are looking for does not exist, or you do not have student permissions to view this workspace.
+          {isBusiness 
+            ? "You are currently logged in as a Business. You do not have permissions to view the Student Workspace." 
+            : "The page you are looking for does not exist, or you need to log in to view this workspace."}
         </p>
-        <Link href="/login" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
-          Return to Login
+        <Link 
+          href={isBusiness ? "/business/dashboard" : "/login"} 
+          className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          {isBusiness ? "Return to My Dashboard" : "Log In"}
         </Link>
       </div>
     );
@@ -73,7 +82,6 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => {
-            // Using startsWith handles active states for nested routes (e.g. /student/workspace/123)
             const isActive = pathname.startsWith(item.href);
             return (
               <Link 
@@ -106,7 +114,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
             
-            {/* Dynamic Student Dropdown (No longer hardcoded) */}
+            {/* Dynamic Student Dropdown */}
             <div className="ml-2 border-l border-zinc-200 pl-4 dark:border-zinc-800">
               <UserDropdown />
             </div>

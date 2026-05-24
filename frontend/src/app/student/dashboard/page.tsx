@@ -30,15 +30,19 @@ export default function StudentDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // RAG Pipeline States
+  const [searchCriteria, setSearchCriteria] = useState("");
+  const [isSearchingAi, setIsSearchingAi] = useState(false);
+  const [aiMatchResult, setAiMatchResult] = useState<any>(null);
+
   // Access Control States
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [isWrongRole, setIsWrongRole] = useState(false);
 
   useEffect(() => {
-    // 1. Client-side Authentication Check
     const userId = localStorage.getItem("user_id");
     const role = localStorage.getItem("role");
-    const token = localStorage.getItem("token"); // Prepare for when you add JWT
+    const token = localStorage.getItem("token"); 
 
     if (!userId) {
       setIsUnauthorized(true);
@@ -52,13 +56,11 @@ export default function StudentDashboard() {
       return;
     }
 
-    // 2. Fetch User-Specific Data
     const fetchDashboard = async () => {
       try {
         const response = await fetch(`http://127.0.0.1:8000/api/student/${userId}/dashboard`, {
           headers: {
             "Content-Type": "application/json",
-            // Inject token here once your backend login route issues one
             ...(token ? { "Authorization": `Bearer ${token}` } : {})
           }
         });
@@ -95,52 +97,34 @@ export default function StudentDashboard() {
     }, 100);
   }, [isLoading, isUnauthorized, isWrongRole]);
 
+  // RAG Fetch Function
+  const handleAiSearch = async () => {
+    if (!searchCriteria.trim()) return;
+    setIsSearchingAi(true);
+    setAiMatchResult(null);
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/match-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ student_criteria: searchCriteria })
+      });
+      if (!response.ok) throw new Error("AI Match Failed");
+      const json = await response.json();
+      setAiMatchResult(json);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to connect to the AI matching service.");
+    } finally {
+      setIsSearchingAi(false);
+    }
+  };
+
   // --- UI FOR RESTRICTED ACCESS ---
-  if (isUnauthorized) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-10 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 max-w-md">
-          <svg className="mx-auto h-12 w-12 text-rose-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">Authentication Required</h2>
-          <p className="text-sm text-zinc-500 mb-6">You must be logged in to view your execution dashboard.</p>
-          <div className="flex flex-col gap-3">
-            <Link href="/login" className="w-full rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-teal-600">Log In</Link>
-            <Link href="/register" className="w-full rounded-lg border border-zinc-200 bg-transparent px-4 py-2.5 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">Create an Account</Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (isUnauthorized) return (<div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><div className="rounded-2xl border border-zinc-200 bg-white p-10 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 max-w-md"><h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">Authentication Required</h2><div className="flex flex-col gap-3"><Link href="/login" className="w-full rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-teal-600">Log In</Link></div></div></div>);
+  if (isWrongRole) return (<div className="flex flex-1 flex-col items-center justify-center p-6 text-center"><h1 className="text-6xl font-black text-zinc-900 dark:text-zinc-50 mb-4">404</h1><Link href="/business/dashboard" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Go to My Dashboard</Link></div>);
+  if (isLoading) return (<div className="flex flex-1 items-center justify-center p-6"><svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>);
+  if (error || !data) return (<div className="flex flex-1 items-center justify-center p-6 text-rose-500 font-bold">Error: {error || "Failed to load"}</div>);
 
-  if (isWrongRole) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-6xl font-black text-zinc-900 dark:text-zinc-50 mb-4">404</h1>
-        <h2 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">Page Not Found</h2>
-        <p className="text-sm text-zinc-500 mb-6 max-w-md">The page you are looking for does not exist, or you are logged in as a Business and trying to access the Student Workspace.</p>
-        <Link href="/business/dashboard" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Go to My Dashboard</Link>
-      </div>
-    );
-  }
-
-  // --- NORMAL LOADING & ERROR STATES ---
-  if (isLoading) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-6">
-        <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-6 text-rose-500 font-bold">
-        Error: {error || "Failed to load"}
-      </div>
-    );
-  }
-
-  // Calculate XP Progress
   const nextTierTarget = 1000;
   const xpPercentage = Math.min((data.xp_points / nextTierTarget) * 100, 100);
   
@@ -149,10 +133,8 @@ export default function StudentDashboard() {
     if (tier === 'silver') return { text: "text-zinc-600 dark:text-zinc-400", bg: "bg-zinc-400", glow: "shadow-[0_0_15px_rgba(161,161,170,0.5)]" };
     return { text: "text-amber-600 dark:text-amber-500", bg: "bg-amber-500", glow: "shadow-[0_0_15px_rgba(245,158,11,0.5)]" };
   };
-
   const tierStyles = getTierStyles(data.trust_tier);
 
-  // --- MAIN DASHBOARD RENDER ---
   return (
     <main ref={contentRef} className="flex-1 p-6 lg:p-10 overflow-y-auto w-full max-w-7xl mx-auto">
       {/* Header */}
@@ -169,7 +151,6 @@ export default function StudentDashboard() {
 
       {/* Gamified Trust & Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 opacity-0">
-        {/* Trust Tier Card */}
         <div className="md:col-span-2 rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div>
@@ -195,7 +176,6 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* Financial Snapshot */}
         <div className="rounded-3xl border-2 border-teal-500/20 bg-teal-50/50 p-8 shadow-sm dark:border-teal-900/50 dark:bg-teal-900/10 flex flex-col justify-center relative overflow-hidden">
           <div className="absolute -right-6 -bottom-6 h-32 w-32 rounded-full bg-teal-500/10 blur-2xl"></div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 mb-2">Pending Escrow</h3>
@@ -241,7 +221,7 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* AI Recommended Jobs */}
+        {/* AI Recommended Jobs (RAG PIPELINE UPDATE) */}
         <div className="space-y-4">
           <h2 className="text-lg font-bold flex items-center gap-2">
             <svg className="h-5 w-5 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
@@ -249,23 +229,71 @@ export default function StudentDashboard() {
           </h2>
 
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/50">
-            {data.recommended_jobs.length === 0 ? (
-              <p className="text-zinc-500 font-medium text-center py-4">No new matches available right now.</p>
-            ) : (
-              data.recommended_jobs.map((job, idx) => (
-                <div key={job.id} className={`flex items-start justify-between ${idx !== data.recommended_jobs.length -1 ? 'border-b border-zinc-100 pb-5 mb-5 dark:border-zinc-800' : ''}`}>
-                  <div>
-                    <h3 className="font-bold text-base">{job.title}</h3>
-                    <div className="flex items-center gap-3 mt-1.5">
-                      <span className="text-xs font-bold text-teal-600 dark:text-teal-400">{Math.floor(Math.random() * (99 - 85 + 1) + 85)}% Match</span>
-                      <span className="text-xs font-medium text-zinc-500 capitalize">₹{job.escrow_amount.toLocaleString()} • {job.category}</span>
-                    </div>
-                  </div>
-                  <Link href={`/student/market/${job.id}`} className="shrink-0 rounded-lg bg-teal-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-teal-500">
-                    Draft Pitch
-                  </Link>
+            
+            {/* The RAG Search Input */}
+            <div className="mb-6 flex gap-2">
+              <input
+                type="text"
+                className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-2.5 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950"
+                placeholder="E.g., I want python web scraping jobs..."
+                value={searchCriteria}
+                onChange={(e) => setSearchCriteria(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
+              />
+              <button
+                onClick={handleAiSearch}
+                disabled={isSearchingAi || !searchCriteria}
+                className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-50 dark:text-zinc-900"
+              >
+                {isSearchingAi ? "Searching..." : "Search"}
+              </button>
+            </div>
+
+            {/* RAG Results Render */}
+            {aiMatchResult ? (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-teal-50 p-4 border border-teal-100 dark:bg-teal-900/10 dark:border-teal-900/30">
+                  <h3 className="font-bold text-teal-800 dark:text-teal-400 mb-2">AI Analysis</h3>
+                  <p className="text-sm text-teal-700 dark:text-teal-300 whitespace-pre-wrap">
+                    {aiMatchResult.analysis || aiMatchResult.message}
+                  </p>
                 </div>
-              ))
+
+                {aiMatchResult.jobs_found && aiMatchResult.jobs_found.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-zinc-700 dark:text-zinc-300 mb-3 text-sm">Vector DB Matches:</h4>
+                    {aiMatchResult.jobs_found.map((job: {id: string, title: string}, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between border-b border-zinc-100 pb-3 mb-3 dark:border-zinc-800 last:border-0">
+                        <span className="font-bold text-sm">{job.title}</span>
+                        {/* THE FIX: Added the job.id to the URL path */}
+                        <Link href={`/student/market/${job.id}/pitch`} className="shrink-0 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-500">
+                          Draft Pitch
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Fallback to static recommendations if RAG hasn't been used yet
+              data.recommended_jobs.length === 0 ? (
+                <p className="text-zinc-500 font-medium text-center py-4">Search your criteria above to find RAG matches.</p>
+              ) : (
+                data.recommended_jobs.map((job, idx) => (
+                  <div key={job.id} className={`flex items-start justify-between ${idx !== data.recommended_jobs.length -1 ? 'border-b border-zinc-100 pb-5 mb-5 dark:border-zinc-800' : ''}`}>
+                    <div>
+                      <h3 className="font-bold text-base">{job.title}</h3>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-xs font-bold text-teal-600 dark:text-teal-400">Static Match</span>
+                        <span className="text-xs font-medium text-zinc-500 capitalize">₹{job.escrow_amount.toLocaleString()} • {job.category}</span>
+                      </div>
+                    </div>
+                    <Link href={`/student/market/${job.id}/pitch`} className="shrink-0 rounded-lg bg-teal-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-teal-500">
+                      Draft Pitch
+                    </Link>
+                  </div>
+                ))
+              )
             )}
             
             <Link href="/student/market" className="mt-6 block text-center text-sm font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
