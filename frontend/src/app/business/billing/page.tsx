@@ -41,7 +41,8 @@ export default function BusinessBilling() {
           return;
       }
 
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/billing`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/business/${userId}/billing`, {
           headers: {
               "Content-Type": "application/json",
               "x-user-id": userId // Required security header
@@ -73,7 +74,8 @@ export default function BusinessBilling() {
 
     setIsPortalLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/stripe/portal`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/business/${userId}/stripe/portal`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",

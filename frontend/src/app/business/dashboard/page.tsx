@@ -59,7 +59,8 @@ export default function BusinessDashboard() {
     // 2. Fetch User-Specific Data
     const fetchDashboard = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/dashboard`, {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/business/${userId}/dashboard`, {
           headers: {
             "Content-Type": "application/json",
             "x-user-id": userId, // Required security header
