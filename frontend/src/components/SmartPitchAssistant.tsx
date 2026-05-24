@@ -82,7 +82,7 @@ export default function SmartPitchAssistant({ jobTitle, jobDescription }: SmartP
             <div>
               <strong className="text-sm text-gray-800 block mb-1">Missing Portfolio Assets:</strong>
               <ul className="list-disc pl-5 text-sm text-gray-700">
-                {feedback.missing_assets_to_add.map((asset: str, idx: int) => (
+                {feedback.missing_assets_to_add.map((asset: string, idx: number) => (
                   <li key={idx}>{asset}</li>
                 ))}
               </ul>
