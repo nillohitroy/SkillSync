@@ -39,7 +39,8 @@ export default function StudentEarnings() {
 
   const fetchBillingData = useCallback(async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/billing`);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/billing`);
       if (response.ok) {
         const json = await response.json();
         setData(json);
@@ -58,7 +59,8 @@ export default function StudentEarnings() {
   const handleStripeConnect = async () => {
     setIsActionLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/stripe/onboard`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/stripe/onboard`, {
         method: "POST"
       });
       if (response.ok) {
@@ -75,7 +77,8 @@ export default function StudentEarnings() {
   const handleOpenStripePortal = async () => {
     setIsActionLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/stripe/dashboard`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/stripe/dashboard`, {
         method: "POST"
       });
       if (response.ok) {
@@ -93,7 +96,8 @@ export default function StudentEarnings() {
     if (!data || data.available_balance <= 0) return;
     setIsActionLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/withdraw`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/withdraw`, {
         method: "POST"
       });
       if (response.ok) {

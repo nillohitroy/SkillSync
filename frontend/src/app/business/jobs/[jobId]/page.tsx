@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 // Define TypeScript interfaces mapping to our new backend payload
 interface Pitch {
@@ -27,6 +27,7 @@ interface JobDetail {
 
 export default function JobReviewPage() {
   const params = useParams();
+  const router = useRouter();
   const contentRef = useRef<HTMLDivElement>(null);
   const pitchesRef = useRef<HTMLDivElement>(null);
 
@@ -34,13 +35,24 @@ export default function JobReviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Fetch Job details from FastAPI
+  // 1. Fetch Job details from FastAPI Securely
   useEffect(() => {
     const fetchJobDetails = async () => {
       try {
-        const MOCK_CLIENT_ID = "001"; // Using the same mock ID
+        const userId = localStorage.getItem("user_id");
+        if (!userId) {
+          router.push('/login');
+          return;
+        }
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";        
+        const response = await fetch(`${API_URL}/api/business/${userId}/jobs/${params.jobId}`, {
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId // Required security header
+          }
+        });
         
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/jobs/${params.jobId}`);
         if (!response.ok) {
           const errData = await response.json();
           throw new Error(errData.detail || "Failed to load job details");
@@ -58,7 +70,7 @@ export default function JobReviewPage() {
     if (params.jobId) {
       fetchJobDetails();
     }
-  }, [params.jobId]);
+  }, [params.jobId, router]);
 
   // 2. Trigger Anime.js only after data has loaded
   useEffect(() => {
@@ -77,7 +89,7 @@ export default function JobReviewPage() {
       x: [-20, 0],
       duration: 600,
       ease: "outQuart",
-      delay: (el: any, i: number) => i * 100, // Reduced delay for smoother chain
+      delay: (el: any, i: number) => i * 100,
     }, "-=200");
   }, [isLoading, job]);
 
@@ -103,8 +115,14 @@ export default function JobReviewPage() {
 
   if (error || !job) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-rose-500 font-bold">
-        Error: {error || "Failed to load job details"}
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-600 dark:border-rose-900/50 dark:bg-rose-900/10 mb-4">
+          <p className="font-bold">Error loading job details:</p>
+          <p className="text-sm">{error}</p>
+        </div>
+        <Link href="/business/dashboard" className="text-sm font-bold text-teal-600 hover:underline">
+          Return to Dashboard
+        </Link>
       </div>
     );
   }
@@ -116,9 +134,9 @@ export default function JobReviewPage() {
         {/* Header */}
         <div className="mb-8 opacity-0 flex flex-col md:flex-row md:justify-between md:items-start gap-4">
           <div>
-            <Link href="/business/dashboard" className="inline-flex items-center gap-2 text-sm font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors mb-4">
+            <Link href="/business/jobs" className="inline-flex items-center gap-2 text-sm font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors mb-4">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-              Back to Pipeline
+              Back to Job Listings
             </Link>
             <div className="flex items-center gap-3 mb-2">
               <span className={`flex h-3 w-3 rounded-full ${job.status === 'completed' ? 'bg-zinc-500' : 'bg-amber-500'}`}></span>
@@ -167,7 +185,6 @@ export default function JobReviewPage() {
                     </div>
                     
                     <div className="text-right">
-                      {/* Using the job's set escrow, or if you plan to let students negotiate, use pitch.bid here */}
                       <div className="text-xl font-black text-teal-700 dark:text-teal-400">₹{job.escrow_amount.toLocaleString()}</div>
                       <div className="text-xs font-bold text-zinc-500 flex items-center gap-1 mt-1 justify-end">
                         <svg className="h-3 w-3 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>

@@ -45,21 +45,28 @@ export default function CreateJobPage() {
     setIsSubmitting(true);
 
     try {
-      const MOCK_CLIENT_ID = "001"; 
+      // FIX 1: Grab the real user ID from local storage instead of the mock
+      const userId = localStorage.getItem("user_id");
+      if (!userId) {
+        throw new Error("Authentication error. Please log in again.");
+      }
 
       const payload = {
         title: formData.title,
         category: formData.category,
-        deadline: formData.deadline.toISOString(), // Now safely converting the Date object
+        deadline: formData.deadline.toISOString(), // Safely converting the Date object
         prompt_text: formData.prompt_text,
         escrow_amount: parseFloat(formData.escrow_amount),
         cron_schedule: formData.isRecurring ? "Weekly" : null
       };
 
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/jobs`, {
+      // FIX 2: Use the real userId in the URL and add the x-user-id header
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/business/${userId}/jobs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-user-id": userId // <-- This header unlocks the 403 Forbidden Error!
         },
         body: JSON.stringify(payload),
       });
@@ -85,7 +92,8 @@ export default function CreateJobPage() {
     } catch (error: any) {
       console.error(error);
       alert(error.message || "Failed to deploy task. Check the console for errors.");
-      setIsSubmitting(false);
+    } finally {
+      setIsSubmitting(false); // Make sure this runs even if it fails
     }
   };
 

@@ -28,7 +28,8 @@ export default function PipelineExecutionPage() {
     const fetchJob = async () => {
       try {
         const MOCK_CLIENT_ID = "001"; // Consistent mock ID
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/jobs/${params.jobId}`);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/business/${MOCK_CLIENT_ID}/jobs/${params.jobId}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -66,7 +67,8 @@ export default function PipelineExecutionPage() {
     
     try {
       const MOCK_CLIENT_ID = "001";
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/jobs/${job.id}/signoff`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/business/${MOCK_CLIENT_ID}/jobs/${job.id}/signoff`, {
         method: "POST"
       });
       

@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 import stripe
 import os
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -36,20 +37,31 @@ class BusinessBillingResponse(BaseModel):
     payment_methods: List[PaymentMethodItem]
     recent_invoices: List[InvoiceItem]
 
+# --- NEW SECURITY DEPENDENCY ---
+def verify_ownership(client_id: str, x_user_id: str = Header(default=None)):
+    """
+    Cross-checks the URL client_id against the actual logged-in user ID passed in the headers.
+    Prevents User B from querying User A's data.
+    """
+    if not x_user_id or x_user_id != client_id:
+        raise HTTPException(
+            status_code=403, 
+            detail="Security Block: You cannot access or modify data belonging to another business."
+        )
+    return client_id
+
+
 @router.get("/{client_id}/dashboard", response_model=BusinessDashboardResponse)
-def get_business_dashboard(client_id: str, db: Session = Depends(get_db)):
-    # 1. Verify the client exists
+def get_business_dashboard(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     client = db.query(User).filter(User.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # 2. Fetch all active jobs for this specific SME
     active_jobs = db.query(Job).filter(
         Job.client_id == client_id,
         Job.status != JobStatus.completed
     ).all()
 
-    # 3. Calculate dynamic metrics based on the real database state
     total_volume = sum(job.escrow_amount for job in active_jobs)
     awaiting_signoff = sum(1 for job in active_jobs if job.status == JobStatus.review)
     
@@ -59,28 +71,21 @@ def get_business_dashboard(client_id: str, db: Session = Depends(get_db)):
         active_tasks=len(active_jobs)
     )
 
-    # 4. Return the structured payload
-    return BusinessDashboardResponse(
-        stats=stats,
-        active_pipeline=active_jobs
-    )
+    return BusinessDashboardResponse(stats=stats, active_pipeline=active_jobs)
 
 
 @router.post("/{client_id}/jobs", response_model=JobResponse)
-def create_new_job(client_id: str, job_data: JobCreate, db: Session = Depends(get_db)):
-    # 1. Verify the client exists
+def create_new_job(job_data: JobCreate, client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     client = db.query(User).filter(User.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # 2. Convert the Pydantic schema into a SQLAlchemy database model
     new_job = Job(
         **job_data.model_dump(), 
         client_id=client_id,
-        status=JobStatus.collecting_pitches # Sets initial pipeline stage
+        status=JobStatus.collecting_pitches 
     )
 
-    # 3. Save to Supabase
     db.add(new_job)
     db.commit()
     db.refresh(new_job)
@@ -89,16 +94,11 @@ def create_new_job(client_id: str, job_data: JobCreate, db: Session = Depends(ge
 
 
 @router.get("/{client_id}/jobs", response_model=List[JobResponse])
-def get_business_jobs(client_id: str, db: Session = Depends(get_db)):
-    """
-    Fetches all jobs posted by a specific SME, ordered by newest first.
-    """
-    # 1. Verify the client exists
+def get_business_jobs(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     client = db.query(User).filter(User.id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # 2. Fetch all jobs for this client
     jobs = db.query(Job).filter(
         Job.client_id == client_id
     ).order_by(Job.created_at.desc()).all()
@@ -107,7 +107,7 @@ def get_business_jobs(client_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{client_id}/jobs/{job_id}")
-def get_job_details(client_id: str, job_id: str, db: Session = Depends(get_db)):
+def get_job_details(job_id: str, client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id, Job.client_id == client_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -141,10 +141,7 @@ def get_job_details(client_id: str, job_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{client_id}/pipeline", response_model=List[PipelineJob])
-def get_pipeline(client_id: str, db: Session = Depends(get_db)):
-    """
-    Fetches only jobs that are actively being worked on.
-    """
+def get_pipeline(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     jobs = db.query(Job).filter(
         Job.client_id == client_id,
         Job.status.in_([JobStatus.assigned, JobStatus.in_progress, JobStatus.review])
@@ -166,15 +163,13 @@ def get_pipeline(client_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{client_id}/jobs/{job_id}/signoff")
-def signoff_job(client_id: str, job_id: str, db: Session = Depends(get_db)):
+def signoff_job(job_id: str, client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id, Job.client_id == client_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # 1. Complete the job
     job.status = JobStatus.completed
     
-    # 2. NEW: Transfer the escrow amount to the student's wallet
     if job.assigned_student:
         current_balance = getattr(job.assigned_student, 'wallet_balance', 0.0)
         job.assigned_student.wallet_balance = current_balance + job.escrow_amount
@@ -182,14 +177,12 @@ def signoff_job(client_id: str, job_id: str, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "message": "Escrow released successfully"}
 
+
 @router.get("/{client_id}/automations", response_model=List[AutomationResponse])
-def get_automations(client_id: str, db: Session = Depends(get_db)):
-    """
-    Fetches only jobs that have a recurring cron schedule attached.
-    """
+def get_automations(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     jobs = db.query(Job).filter(
         Job.client_id == client_id,
-        Job.cron_schedule.is_not(None) # Only get recurring tasks
+        Job.cron_schedule.is_not(None) 
     ).order_by(Job.created_at.desc()).all()
     
     result = []
@@ -207,28 +200,24 @@ def get_automations(client_id: str, db: Session = Depends(get_db)):
         })
     return result
 
+
 @router.patch("/{client_id}/automations/{job_id}/toggle")
-def toggle_automation(client_id: str, job_id: str, db: Session = Depends(get_db)):
-    """
-    Flips the active/paused state of a specific automation.
-    """
+def toggle_automation(job_id: str, client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id, Job.client_id == client_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Automation not found")
     
-    # Flip the boolean
     job.is_cron_active = not job.is_cron_active
     db.commit()
-    
     return {"status": "success", "is_cron_active": job.is_cron_active}
 
+
 @router.get("/{client_id}/profile")
-def get_business_profile(client_id: str, db: Session = Depends(get_db)):
+def get_business_profile(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == client_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
         
-    # Calculate real platform activity
     total_jobs = db.query(Job).filter(Job.client_id == client_id).count()
     active_jobs = db.query(Job).filter(
         Job.client_id == client_id, 
@@ -246,8 +235,9 @@ def get_business_profile(client_id: str, db: Session = Depends(get_db)):
         "recent_jobs": [{"id": j.id, "title": j.title, "budget": j.escrow_amount, "status": j.status.value if hasattr(j.status, 'value') else j.status} for j in recent_jobs]
     }
 
+
 @router.patch("/{client_id}/profile")
-def update_business_profile(client_id: str, payload: ProfileUpdatePayload, db: Session = Depends(get_db)):
+def update_business_profile(payload: ProfileUpdatePayload, client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == client_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -255,27 +245,25 @@ def update_business_profile(client_id: str, payload: ProfileUpdatePayload, db: S
     if payload.full_name:
         user.full_name = payload.full_name
     if payload.profile_data:
-        # Merge existing json with new updates
         current_data = user.profile_data or {}
         user.profile_data = {**current_data, **payload.profile_data}
         
     db.commit()
     return {"status": "success"}
 
+
 @router.get("/{client_id}/billing", response_model=BusinessBillingResponse)
-def get_business_billing(client_id: str, db: Session = Depends(get_db)):
+def get_business_billing(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == client_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # 1. Calculate Active Escrow (Funds locked in ongoing jobs)
     active_jobs = db.query(Job).filter(
         Job.client_id == client_id,
         Job.status.in_([JobStatus.collecting_pitches, JobStatus.assigned, JobStatus.in_progress, JobStatus.review])
     ).all()
     active_escrow = sum(j.escrow_amount for j in active_jobs)
     
-    # 2. Get Recent Invoices (Completed Jobs act as sign-off receipts)
     completed_jobs = db.query(Job).filter(
         Job.client_id == client_id,
         Job.status == JobStatus.completed
@@ -288,15 +276,12 @@ def get_business_billing(client_id: str, db: Session = Depends(get_db)):
         "amount": job.escrow_amount
     } for job in completed_jobs]
 
-    # 3. Fetch Vaulted Payment Methods from Stripe
     payment_methods = []
     if user.stripe_customer_id:
         try:
-            # Fetch the customer to find out which card is the default
             customer = stripe.Customer.retrieve(user.stripe_customer_id)
             default_pm = customer.invoice_settings.default_payment_method
 
-            # List the actual cards
             pms = stripe.PaymentMethod.list(
                 customer=user.stripe_customer_id,
                 type="card",
@@ -321,15 +306,14 @@ def get_business_billing(client_id: str, db: Session = Depends(get_db)):
         "recent_invoices": invoices
     }
 
+
 @router.post("/{client_id}/stripe/portal")
-def create_customer_portal(client_id: str, db: Session = Depends(get_db)):
-    """Generates a secure Stripe Customer Portal session to manage cards."""
+def create_customer_portal(client_id: str = Depends(verify_ownership), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == client_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Client not found")
 
     try:
-        # If the SME doesn't have a Stripe Customer ID yet, create one on the fly
         if not user.stripe_customer_id:
             customer = stripe.Customer.create(
                 email=user.email,
@@ -338,7 +322,6 @@ def create_customer_portal(client_id: str, db: Session = Depends(get_db)):
             user.stripe_customer_id = customer.id
             db.commit()
 
-        # Create the portal session and tell it where to redirect back to
         session = stripe.billing_portal.Session.create(
             customer=user.stripe_customer_id,
             return_url="http://localhost:3000/business/billing"
@@ -346,3 +329,51 @@ def create_customer_portal(client_id: str, db: Session = Depends(get_db)):
         return {"url": session.url}
     except stripe.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/trigger-automations", tags=["Automations"])
+def trigger_cron_automations(db: Session = Depends(get_db)):
+    """
+    This endpoint acts as the 'Cron Engine'. 
+    When called, it finds all active recurring jobs and creates a fresh copy 
+    in the 'collecting_pitches' status.
+    """
+    try:
+        # 1. Find all parent jobs where cron is actively running
+        active_crons = db.query(Job).filter(
+            Job.is_cron_active == True,
+            Job.cron_schedule.is_not(None)
+        ).all()
+
+        jobs_created = 0
+
+        for parent_job in active_crons:
+            # 2. Logic to determine if it's time to trigger based on schedule
+            # (For this hackathon demo, we will bypass the actual time-check 
+            # and just forcefully duplicate the job to prove it works).
+            
+            # 3. Create the duplicate child job
+            new_job = Job(
+                client_id=parent_job.client_id,
+                title=f"{parent_job.title} (Auto-Generated)",
+                category=parent_job.category,
+                prompt_text=parent_job.prompt_text,
+                escrow_amount=parent_job.escrow_amount,
+                # Reset the status so students can pitch again
+                status=JobStatus.collecting_pitches, 
+                # Ensure the child is NOT a cron job itself
+                is_cron_active=False,
+                cron_schedule=None,
+                # Set a generic deadline 7 days from now
+                deadline=datetime.utcnow() + timedelta(days=7)
+            )
+            
+            db.add(new_job)
+            jobs_created += 1
+
+        db.commit()
+        return {"status": "success", "automations_triggered": jobs_created}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))

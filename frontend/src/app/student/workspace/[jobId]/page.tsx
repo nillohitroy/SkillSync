@@ -27,7 +27,8 @@ export default function WorkspaceDetail() {
     const fetchJobDetails = async () => {
       try {
         const MOCK_STUDENT_ID = "002";
-        const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/jobs/${params.jobId}`);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/jobs/${params.jobId}`);
         if (response.ok) {
           const data = await response.json();
           setJob(data);
@@ -56,7 +57,8 @@ export default function WorkspaceDetail() {
     setIsSubmitting(true);
     try {
       const MOCK_STUDENT_ID = "002";
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/jobs/${job.id}/submit`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/jobs/${job.id}/submit`, {
         method: "POST"
       });
       

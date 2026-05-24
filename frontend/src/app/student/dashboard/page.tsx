@@ -58,7 +58,8 @@ export default function StudentDashboard() {
 
     const fetchDashboard = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/student/${userId}/dashboard`, {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/student/${userId}/dashboard`, {
           headers: {
             "Content-Type": "application/json",
             ...(token ? { "Authorization": `Bearer ${token}` } : {})
@@ -103,7 +104,8 @@ export default function StudentDashboard() {
     setIsSearchingAi(true);
     setAiMatchResult(null);
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/match-jobs", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch("${API_URL}/api/match-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ student_criteria: searchCriteria })

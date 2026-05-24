@@ -49,7 +49,8 @@ export default function BusinessDashboard() {
       return;
     }
 
-    if (role !== "sme") {
+    // Role check - ensuring it matches the actual string stored during login
+    if (role !== "sme") { 
       setIsWrongRole(true);
       setIsLoading(false);
       return;
@@ -61,6 +62,7 @@ export default function BusinessDashboard() {
         const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/dashboard`, {
           headers: {
             "Content-Type": "application/json",
+            "x-user-id": userId, // Required security header
             ...(token ? { "Authorization": `Bearer ${token}` } : {})
           }
         });
@@ -70,7 +72,9 @@ export default function BusinessDashboard() {
             setIsUnauthorized(true);
             return;
           }
-          throw new Error("Failed to load dashboard data");
+          
+          const errData = await response.json();
+          throw new Error(errData.detail || "Failed to load dashboard data");
         }
         
         const json = await response.json();
@@ -148,7 +152,7 @@ export default function BusinessDashboard() {
   if (error || !data) {
     return (
       <div className="flex flex-1 items-center justify-center p-6 text-rose-500 font-bold">
-        Error: {error || "Failed to load"}
+        Error: {error || "Failed to load data"}
       </div>
     );
   }

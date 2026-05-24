@@ -21,13 +21,25 @@ export default function PipelinePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Fetch active pipeline
+  // 1. Fetch active pipeline securely
   useEffect(() => {
     const fetchPipeline = async () => {
       try {
-        const MOCK_CLIENT_ID = "001";
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/pipeline`);
-        if (!response.ok) throw new Error("Failed to load pipeline data");
+        const userId = localStorage.getItem("user_id");
+        if (!userId) throw new Error("Authentication error. Please log in.");
+        
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/business/${userId}/pipeline`, {
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId // Required security header
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 403) throw new Error("Permission denied. You can only view your own pipeline.");
+          throw new Error("Failed to load pipeline data");
+        }
         
         const data = await response.json();
         setJobs(data);
@@ -40,7 +52,7 @@ export default function PipelinePage() {
     fetchPipeline();
   }, []);
 
-  // 2. Trigger Anime.js (Removed jobs.length === 0 to ensure empty state animates)
+  // 2. Trigger Anime.js
   useEffect(() => {
     if (isLoading || !containerRef.current) return;
     

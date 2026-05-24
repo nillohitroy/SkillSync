@@ -24,7 +24,8 @@ export default function StudentWorkspacePage() {
     const fetchWorkspaces = async () => {
       try {
         const MOCK_STUDENT_ID = "002"; // Match your student ID
-        const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/workspaces`);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/workspaces`);
         if (response.ok) {
           const data = await response.json();
           setWorkspaces(data);

@@ -32,7 +32,8 @@ export default function StudentEarningsPage() {
 
   const fetchEarnings = useCallback(async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/earnings`);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/earnings`);
       if (response.ok) {
         const json = await response.json();
         setData(json);
@@ -68,7 +69,8 @@ export default function StudentEarningsPage() {
 
     setIsWithdrawing(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/withdraw`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${MOCK_STUDENT_ID}/withdraw`, {
         method: "POST"
       });
 

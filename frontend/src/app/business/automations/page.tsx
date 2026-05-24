@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Link from "next/link";
+import { useRouter } from "next/navigation"; // Added for auth redirect
 
 interface Automation {
   id: string;
@@ -16,18 +17,35 @@ interface Automation {
 
 export default function AutomationsPage() {
   const contentRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTriggering, setIsTriggering] = useState(false);
 
-  // 1. Fetch the Automations from FastAPI
+  // 1. Fetch the Automations securely from FastAPI
   useEffect(() => {
     const fetchAutomations = async () => {
       try {
-        const MOCK_CLIENT_ID = "001";
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/automations`);
-        if (!response.ok) throw new Error("Failed to load automations");
+        const userId = localStorage.getItem("user_id");
+        if (!userId) {
+            router.push('/login');
+            return;
+        }
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/business/${userId}/automations`, {
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId // Required security header
+          }
+        });
+
+        if (!response.ok) {
+           if (response.status === 403) throw new Error("Permission denied.");
+           throw new Error("Failed to load automations");
+        }
         
         const data = await response.json();
         setAutomations(data);
@@ -38,7 +56,7 @@ export default function AutomationsPage() {
       }
     };
     fetchAutomations();
-  }, []);
+  }, [router]);
 
   // 2. Trigger Anime.js
   useEffect(() => {
@@ -54,15 +72,22 @@ export default function AutomationsPage() {
 
   // 3. Handle toggling the state directly in the Database
   const handleToggle = async (jobId: string, currentStatus: boolean) => {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) return;
+
     // Optimistic UI Update: Flip it locally instantly for a snappy feel
     setAutomations(prev => prev.map(auto => 
       auto.id === jobId ? { ...auto, is_cron_active: !currentStatus } : auto
     ));
 
     try {
-      const MOCK_CLIENT_ID = "001";
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/automations/${jobId}/toggle`, {
-        method: "PATCH"
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/business/${userId}/automations/${jobId}/toggle`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId 
+        }
       });
       
       if (!response.ok) throw new Error("Failed to toggle automation");
@@ -74,6 +99,27 @@ export default function AutomationsPage() {
         auto.id === jobId ? { ...auto, is_cron_active: currentStatus } : auto
       ));
     }
+  };
+
+  // 4. NEW: Demo function to force trigger the cron engine
+  const forceTriggerCron = async () => {
+      setIsTriggering(true);
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const response = await fetch(`${API_URL}/api/business/trigger-automations`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        });
+        
+        if (!response.ok) throw new Error("Failed to trigger engine.");
+        
+        const result = await response.json();
+        alert(`Success! ${result.automations_triggered} new jobs were automatically generated and sent to the market.`);
+      } catch (err) {
+          alert("Failed to trigger automations. Ensure backend is running.");
+      } finally {
+          setIsTriggering(false);
+      }
   };
 
   if (isLoading) {
@@ -93,13 +139,25 @@ export default function AutomationsPage() {
           <h1 className="text-3xl font-extrabold tracking-tight mb-2">Automated Workflows</h1>
           <p className="text-sm font-medium text-zinc-500">Manage your recurring execution pipelines and cron schedules.</p>
         </div>
-        <Link 
-          href="/business/jobs/create"
-          className="mt-4 sm:mt-0 inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-teal-500 hover:shadow-lg hover:shadow-teal-500/25"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-          Create Automation
-        </Link>
+        
+        <div className="mt-4 sm:mt-0 flex gap-3">
+          {/* NEW BUTTON FOR DEMO */}
+          <button 
+            onClick={forceTriggerCron}
+            disabled={isTriggering}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-bold text-zinc-700 transition-all hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {isTriggering ? "Running Engine..." : "Force Trigger Demo"}
+          </button>
+
+          <Link 
+            href="/business/jobs/create"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-teal-500 hover:shadow-lg hover:shadow-teal-500/25"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+            Create Automation
+          </Link>
+        </div>
       </div>
 
       {error ? (
@@ -153,7 +211,7 @@ export default function AutomationsPage() {
                   </div>
                   <div className="flex items-center justify-between pb-1">
                     <span className="text-sm font-medium text-zinc-500">Execution Strategy</span>
-                    <span className="text-sm font-bold truncate max-w-[180px] text-right">{job.assigned_student_name}</span>
+                    <span className="text-sm font-bold truncate max-w-[180px] text-right">{job.assigned_student_name || "Auto-Matched Pool"}</span>
                   </div>
                 </div>
 

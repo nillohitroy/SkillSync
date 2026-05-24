@@ -23,7 +23,8 @@ export default function BusinessProfile() {
     }
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/business/${userId}/profile`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${API_URL}/api/business/${userId}/profile`, {
         headers: {
           "Content-Type": "application/json",
           ...(token ? { "Authorization": `Bearer ${token}` } : {})
@@ -69,7 +70,8 @@ export default function BusinessProfile() {
     };
 
     try {
-      await fetch(`http://127.0.0.1:8000/api/business/${userId}/profile`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      await fetch(`${API_URL}/api/business/${userId}/profile`, {
         method: "PATCH",
         headers: { 
           "Content-Type": "application/json",

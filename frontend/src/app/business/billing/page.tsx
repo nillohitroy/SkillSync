@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation"; // Added for auth redirect
 
 interface PaymentMethod {
   id: string;
@@ -26,36 +27,60 @@ interface BillingData {
 }
 
 export default function BusinessBilling() {
+  const router = useRouter();
   const [data, setData] = useState<BillingData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
-
-  const MOCK_CLIENT_ID = "001";
+  const [error, setError] = useState<string | null>(null);
 
   const fetchBillingData = useCallback(async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/billing`);
-      if (response.ok) {
-        const json = await response.json();
-        setData(json);
+      const userId = localStorage.getItem("user_id");
+      if (!userId) {
+          router.push('/login');
+          return;
       }
-    } catch (err) {
+
+      const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/billing`, {
+          headers: {
+              "Content-Type": "application/json",
+              "x-user-id": userId // Required security header
+          }
+      });
+      
+      if (!response.ok) {
+          if (response.status === 403) throw new Error("Permission Denied.");
+          throw new Error("Failed to load billing data.");
+      }
+      
+      const json = await response.json();
+      setData(json);
+    } catch (err: any) {
       console.error("Error loading billing data:", err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     fetchBillingData();
   }, [fetchBillingData]);
 
   const handleOpenStripePortal = async () => {
+    const userId = localStorage.getItem("user_id");
+    if (!userId) return;
+
     setIsPortalLoading(true);
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/stripe/portal`, {
-        method: "POST"
+      const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/stripe/portal`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId // Required security header
+        }
       });
+      
       if (response.ok) {
         const body = await response.json();
         window.location.href = body.url; // Secure redirect to Stripe
@@ -64,6 +89,7 @@ export default function BusinessBilling() {
       }
     } catch (err) {
       console.error(err);
+      alert("Network error connecting to Stripe.");
     } finally {
       setIsPortalLoading(false);
     }
@@ -75,6 +101,14 @@ export default function BusinessBilling() {
         <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
       </div>
     );
+  }
+
+  if (error) {
+     return (
+        <div className="flex flex-1 items-center justify-center p-6 h-[80vh] text-rose-500 font-bold text-center">
+            {error}
+        </div>
+     );
   }
 
   if (!data) return null;
@@ -93,9 +127,7 @@ export default function BusinessBilling() {
         >
           {isPortalLoading ? "Connecting..." : (
             <>
-              <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24}
-                fill={"currentColor"} viewBox={"0 0 24 24"}>
-                {/* Boxicons v3.0.8 https://boxicons.com | License  https://docs.boxicons.com/free */}
+              <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} fill="currentColor" viewBox="0 0 24 24">
                 <path d="M13.479 9.883c-1.626-.604-2.512-1.067-2.512-1.803 0-.622.511-.977 1.423-.977 1.667 0 3.379.642 4.558 1.22l.666-4.111c-.935-.446-2.847-1.177-5.49-1.177-1.87 0-3.425.489-4.536 1.401-1.155.954-1.757 2.334-1.757 4 0 3.023 1.847 4.312 4.847 5.403 1.936.688 2.579 1.178 2.579 1.934 0 .732-.629 1.155-1.762 1.155-1.403 0-3.716-.689-5.231-1.578l-.674 4.157c1.304.732 3.705 1.488 6.197 1.488 1.976 0 3.624-.467 4.735-1.356 1.245-.977 1.89-2.422 1.89-4.289 0-3.091-1.889-4.38-4.935-5.468h.002z" />
               </svg>
               Manage Billing via Stripe

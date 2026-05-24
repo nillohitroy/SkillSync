@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Define the interface for the incoming API data
 interface MarketJob {
@@ -18,8 +19,13 @@ interface MarketJob {
 
 export default function JobMarketPage() {
   const contentRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const [activeFilter, setActiveFilter] = useState("All");
   
+  // Access Control States
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [isWrongRole, setIsWrongRole] = useState(false);
+
   // Dynamic State
   const [jobs, setJobs] = useState<MarketJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,16 +36,43 @@ export default function JobMarketPage() {
   const [isSearchingAi, setIsSearchingAi] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
-  // 1. Fetch Initial Market Feed (Fallback/Base Load)
+  // 0. Authorization Check
+  useEffect(() => {
+    const userId = localStorage.getItem("user_id");
+    const role = localStorage.getItem("role");
+
+    if (!userId) {
+      setIsUnauthorized(true);
+      return;
+    }
+
+    if (role !== "student") {
+      setIsWrongRole(true);
+      return;
+    }
+  }, []);
+
+  // 1. Fetch Initial Market Feed
   const fetchMarket = async () => {
+    const userId = localStorage.getItem("user_id");
+    const role = localStorage.getItem("role");
+    
+    if (!userId || role !== "student") return;
+
     setIsLoading(true);
     setError(null);
     setAiAnalysis(null);
     setActiveFilter("All");
     
     try {
-      const MOCK_STUDENT_ID = "002"; // Ensure this matches your student UUID in Supabase
-      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/market`);
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${API_URL}/api/student/${userId}/market`, {
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": userId,
+          "x-user-role": role
+        }
+      });
       
       if (!response.ok) throw new Error("Failed to load marketplace");
       
@@ -53,10 +86,11 @@ export default function JobMarketPage() {
   };
 
   useEffect(() => {
-    fetchMarket();
-  }, []);
+    if (!isUnauthorized && !isWrongRole) {
+      fetchMarket();
+    }
+  }, [isUnauthorized, isWrongRole]);
 
-  // 2. RAG Semantic Search Function
   // 2. RAG Semantic Search Function
   const handleAiSearch = async () => {
     if (!searchQuery.trim()) {
@@ -64,17 +98,30 @@ export default function JobMarketPage() {
       return;
     }
     
+    const userId = localStorage.getItem("user_id");
+    const role = localStorage.getItem("role");
+
+    if (!userId || role !== "student") return;
+
     setIsSearchingAi(true);
     setError(null);
     
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/match-jobs", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch("${API_URL}/api/match-jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-user-id": userId,
+          "x-user-role": role
+        },
         body: JSON.stringify({ student_criteria: searchQuery })
       });
       
-      if (!response.ok) throw new Error("AI Match Failed");
+      if (!response.ok) {
+        if (response.status === 403) throw new Error("Access Denied.");
+        throw new Error("AI Match Failed");
+      }
       
       const data = await response.json();
       
@@ -82,25 +129,24 @@ export default function JobMarketPage() {
          setJobs([]); 
          setAiAnalysis(data.message);
       } else {
-         // Map the REAL RAG results to the UI
+         // Map the REAL RAG results to the UI, strictly avoiding random numbers
          const formattedJobs: MarketJob[] = data.jobs_found.map((job: any) => ({
             id: job.id,
             title: job.title,
-            client: job.client_id || "Verified SME", // Uses real client ID if available
-            category: "AI Match",
-            budget: job.escrow_amount || Math.floor(Math.random() * (5000 - 1000) + 1000), 
-            // Convert pgvector similarity (e.g., 0.85) to a clean percentage (85%)
-            match: job.similarity ? Math.round(job.similarity * 100) : 95, 
+            client: job.client_id || "Verified SME", 
+            category: job.category || "AI Match",
+            budget: job.escrow_amount || 0, 
+            match: job.similarity ? Math.round(job.similarity * 100) : 0, 
             posted: job.created_at || new Date().toISOString(),
-            desc: job.description || "Matched based on your AI semantic search criteria." 
+            desc: job.description || "Details for this job are currently unavailable." 
          }));
          
          setJobs(formattedJobs);
          setAiAnalysis(data.analysis);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to connect to the AI matching service.");
+      setError(err.message || "Failed to connect to the AI matching service.");
     } finally {
       setIsSearchingAi(false);
     }
@@ -108,7 +154,7 @@ export default function JobMarketPage() {
 
   // 3. Trigger Anime.js
   useEffect(() => {
-    if (isLoading || isSearchingAi || !contentRef.current) return;
+    if (isLoading || isSearchingAi || isUnauthorized || isWrongRole || !contentRef.current) return;
     
     createTimeline().add(contentRef.current.children, {
       opacity: [0, 1],
@@ -117,7 +163,7 @@ export default function JobMarketPage() {
       ease: "outExpo",
       delay: (el: any, i: number) => i * 100,
     }, 100);
-  }, [isLoading, isSearchingAi, jobs.length, activeFilter, aiAnalysis]);
+  }, [isLoading, isSearchingAi, isUnauthorized, isWrongRole, jobs.length, activeFilter, aiAnalysis]);
 
   // Helper function to format relative time
   const getRelativeTime = (dateString: string) => {
@@ -135,12 +181,34 @@ export default function JobMarketPage() {
     if (activeFilter === "All") return true;
     if (activeFilter === "High Match") return job.match >= 90;
     
-    // Bypass filter if we are showing AI RAG results
     if (job.category === "AI Match") return true;
     
     const backendCategoryString = activeFilter === "Social Media" ? "social" : activeFilter.toLowerCase();
-    return job.category.toLowerCase() === backendCategoryString;
+    return job.category?.toLowerCase() === backendCategoryString;
   });
+
+  // --- ACCESS CONTROL RENDERS ---
+  if (isUnauthorized) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <h2 className="text-xl font-bold mb-2">Authentication Required</h2>
+        <Link href="/login" className="rounded-lg bg-teal-500 px-4 py-2 text-white">Log In</Link>
+      </div>
+    );
+  }
+
+  if (isWrongRole) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <h1 className="text-6xl font-black text-zinc-900 mb-4">403</h1>
+        <h2 className="text-xl font-bold mb-2">Access Denied</h2>
+        <p className="text-sm text-zinc-500 mb-6">Business accounts cannot view the student job market.</p>
+        <Link href="/business/dashboard" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-white">
+          Go to Business Dashboard
+        </Link>
+      </div>
+    );
+  }
 
   if (isLoading || isSearchingAi) {
     return (
@@ -181,7 +249,7 @@ export default function JobMarketPage() {
         </div>
       </div>
 
-      {/* AI Analysis Banner (Shows only after a RAG search) */}
+      {/* AI Analysis Banner */}
       {aiAnalysis && (
         <div className="mb-8 opacity-0 rounded-2xl border border-teal-200 bg-teal-50 p-6 shadow-sm dark:border-teal-900/30 dark:bg-teal-900/10">
            <h3 className="flex items-center gap-2 font-bold text-teal-800 dark:text-teal-400 mb-2">
@@ -191,7 +259,6 @@ export default function JobMarketPage() {
            <p className="text-sm font-medium text-teal-700 dark:text-teal-300 leading-relaxed whitespace-pre-wrap">
               {aiAnalysis}
            </p>
-           {/* Reset Button */}
            <button 
              onClick={fetchMarket} 
              className="mt-4 text-xs font-bold text-teal-600 hover:underline dark:text-teal-400"
@@ -201,7 +268,7 @@ export default function JobMarketPage() {
         </div>
       )}
 
-      {/* Categories (Hidden when viewing AI results) */}
+      {/* Categories */}
       {!aiAnalysis && (
         <div className="mb-10 flex flex-wrap gap-2 opacity-0">
           {filters.map(filter => (
@@ -243,7 +310,7 @@ export default function JobMarketPage() {
             <div className="flex-1">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
-                  {job.category.toLowerCase() === 'social' ? 'Social Media' : job.category}
+                  {job.category?.toLowerCase() === 'social' ? 'Social Media' : job.category}
                 </span>
                 <span className="text-xs font-medium text-zinc-500">{getRelativeTime(job.posted)}</span>
               </div>
@@ -254,7 +321,7 @@ export default function JobMarketPage() {
               </p>
               <div className="flex items-center gap-4 text-sm font-bold">
                 <span className="flex items-center gap-1.5 text-zinc-900 dark:text-white">
-                  Escrow: ₹{job.budget.toLocaleString()}
+                  Escrow: ₹{job.budget?.toLocaleString() || 0}
                 </span>
                 <span className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>

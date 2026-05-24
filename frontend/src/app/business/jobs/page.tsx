@@ -25,11 +25,26 @@ export default function JobsListPage() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        // Using the mock ID we established
-        const MOCK_CLIENT_ID = "001";
+        // Fetch the REAL logged-in user ID from local storage
+        const userId = localStorage.getItem("user_id");
         
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/jobs`);
-        if (!response.ok) throw new Error("Failed to load jobs");
+        if (!userId) {
+            throw new Error("Authentication error. Please log in.");
+        }
+
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";        
+        const response = await fetch(`${API_URL}/api/business/${userId}/jobs`, {
+           // THIS FIXES THE 403 ERROR: Provide the security header
+           headers: {
+             "Content-Type": "application/json",
+             "x-user-id": userId 
+           }
+        });
+        
+        if (!response.ok) {
+           if(response.status === 403) throw new Error("You do not have permission to view these jobs.");
+           throw new Error("Failed to load jobs.");
+        }
         
         const data = await response.json();
         setJobs(data);
