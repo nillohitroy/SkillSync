@@ -4,12 +4,50 @@ import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Link from "next/link";
 
+// Define the interface for the incoming API data
+interface MarketJob {
+  id: string;
+  title: string;
+  client: string;
+  category: string;
+  budget: number;
+  match: number;
+  posted: string;
+  desc: string;
+}
+
 export default function JobMarketPage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [activeFilter, setActiveFilter] = useState("All");
+  
+  // Dynamic State
+  const [jobs, setJobs] = useState<MarketJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // 1. Fetch Market Feed
   useEffect(() => {
-    if (!contentRef.current) return;
+    const fetchMarket = async () => {
+      try {
+        const MOCK_STUDENT_ID = "002"; // Ensure this matches your student UUID in Supabase
+        const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/market`);
+        
+        if (!response.ok) throw new Error("Failed to load marketplace");
+        
+        const data = await response.json();
+        setJobs(data);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchMarket();
+  }, []);
+
+  // 2. Trigger Anime.js
+  useEffect(() => {
+    if (isLoading || !contentRef.current) return;
     
     createTimeline().add(contentRef.current.children, {
       opacity: [0, 1],
@@ -18,42 +56,37 @@ export default function JobMarketPage() {
       ease: "outExpo",
       delay: (el: any, i: number) => i * 100,
     }, 100);
-  }, []);
+  }, [isLoading, jobs.length, activeFilter]);
+
+  // Helper function to format relative time
+  const getRelativeTime = (dateString: string) => {
+    const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+    const daysDifference = Math.round((new Date(dateString).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysDifference === 0) return "Today";
+    return rtf.format(daysDifference, 'day');
+  };
 
   const filters = ["All", "Social Media", "Design", "Video", "Tech", "High Match"];
 
-  const jobs = [
-    {
-      id: "job-123",
-      title: "Local Cafe Menu Redesign",
-      client: "Brew & Bites",
-      category: "Design",
-      budget: 800,
-      match: 95,
-      posted: "2 hours ago",
-      desc: "Need a modern, clean, 2-page menu design. Must incorporate our new branding colors and logo. Will provide all text and high-res images of food."
-    },
-    {
-      id: "job-127",
-      title: "Podcast Video Snippets (Weekly)",
-      client: "Startup Hub Media",
-      category: "Video",
-      budget: 2500,
-      match: 88,
-      posted: "5 hours ago",
-      desc: "Looking for an editor to take our 1-hour weekly podcast and cut 4 highly engaging YouTube Shorts/Reels with dynamic captions (Alex Hormozi style)."
-    },
-    {
-      id: "job-128",
-      title: "WhatsApp CRM Bot Setup",
-      client: "Aethon Grid",
-      category: "Tech",
-      budget: 4000,
-      match: 72,
-      posted: "Yesterday",
-      desc: "Need someone to configure a WhatsApp Business API bot to auto-reply to customer inquiries based on a provided FAQ sheet."
-    }
-  ];
+  // FIX: Properly map the UI filter text to the backend database string
+  const filteredJobs = jobs.filter(job => {
+    if (activeFilter === "All") return true;
+    if (activeFilter === "High Match") return job.match >= 90;
+    
+    // Translates "Social Media" to "social", and "Design" to "design", etc.
+    const backendCategoryString = activeFilter === "Social Media" ? "social" : activeFilter.toLowerCase();
+    
+    return job.category.toLowerCase() === backendCategoryString;
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+      </div>
+    );
+  }
 
   return (
     <main ref={contentRef} className="flex-1 p-6 lg:p-10 overflow-y-auto w-full max-w-7xl mx-auto">
@@ -96,15 +129,33 @@ export default function JobMarketPage() {
         ))}
       </div>
 
+      {/* Error or Empty States */}
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-600 opacity-0">
+          <p className="font-bold">Error loading market feed:</p>
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
+
+      {!error && filteredJobs.length === 0 && (
+        <div className="rounded-3xl border border-dashed border-zinc-300 bg-zinc-50 p-12 text-center dark:border-zinc-800 dark:bg-zinc-900/50 opacity-0">
+          <h3 className="text-lg font-bold text-zinc-900 dark:text-white mb-2">No tasks found</h3>
+          <p className="text-sm font-medium text-zinc-500">There are currently no open tasks matching your filter criteria.</p>
+        </div>
+      )}
+
       {/* Jobs Feed */}
       <div className="space-y-4 opacity-0">
-        {jobs.map((job) => (
+        {filteredJobs.map((job) => (
           <div key={job.id} className="group rounded-3xl border border-zinc-200 bg-white p-6 transition-all hover:border-teal-500/30 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/50 flex flex-col md:flex-row gap-6">
             
             <div className="flex-1">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">{job.category}</span>
-                <span className="text-xs font-medium text-zinc-500">{job.posted}</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                  {/* Nicely format "social" back to "Social Media" on the card */}
+                  {job.category.toLowerCase() === 'social' ? 'Social Media' : job.category}
+                </span>
+                <span className="text-xs font-medium text-zinc-500">{getRelativeTime(job.posted)}</span>
               </div>
               <h2 className="text-xl font-bold mb-1 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">{job.title}</h2>
               <p className="text-sm font-bold text-zinc-500 mb-4">{job.client}</p>
@@ -113,7 +164,7 @@ export default function JobMarketPage() {
               </p>
               <div className="flex items-center gap-4 text-sm font-bold">
                 <span className="flex items-center gap-1.5 text-zinc-900 dark:text-white">
-                  Escrow: ₹{job.budget}
+                  Escrow: ₹{job.budget.toLocaleString()}
                 </span>
                 <span className="flex items-center gap-1.5 text-teal-600 dark:text-teal-400">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>

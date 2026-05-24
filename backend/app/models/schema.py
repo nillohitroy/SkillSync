@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Float, ForeignKey, DateTime, Text, Enum, Boolean
+from sqlalchemy import String, Integer, Float, ForeignKey, DateTime, Text, Enum, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, timezone
 import enum
@@ -38,7 +38,10 @@ class User(Base):
     # Student specific (Null for SMEs)
     trust_tier: Mapped[TrustTier | None] = mapped_column(Enum(TrustTier), default=TrustTier.bronze)
     xp_points: Mapped[int] = mapped_column(Integer, default=0)
-    wallet_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    wallet_balance: Mapped[float] = mapped_column(Float, server_default="0.0")
+    stripe_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    profile_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Relationships
     posted_jobs = relationship("Job", back_populates="client", foreign_keys="Job.client_id")

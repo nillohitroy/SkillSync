@@ -5,14 +5,42 @@ import { createTimeline } from "animejs";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+interface WorkspaceDetail {
+  id: string;
+  title: string;
+  client: string;
+  status: string;
+  deadline: string;
+  escrow_amount: number;
+  prompt_text: string;
+}
+
 export default function WorkspaceDetail() {
   const params = useParams();
   const contentRef = useRef<HTMLDivElement>(null);
   
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [job, setJob] = useState<WorkspaceDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!contentRef.current) return;
+    const fetchJobDetails = async () => {
+      try {
+        const MOCK_STUDENT_ID = "002";
+        const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/jobs/${params.jobId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setJob(data);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (params.jobId) fetchJobDetails();
+  }, [params.jobId]);
+
+  useEffect(() => {
+    if (isLoading || !job || !contentRef.current) return;
     
     createTimeline().add(contentRef.current.children, {
       opacity: [0, 1],
@@ -21,12 +49,45 @@ export default function WorkspaceDetail() {
       ease: "outExpo",
       delay: (el: any, i: number) => i * 100,
     }, 100);
-  }, []);
+  }, [isLoading, job]);
 
-  const handleSubmission = () => {
-    setIsSubmitted(true);
-    // In a real app, this updates the database and moves the pipeline stage to "Review" for the SME
+  const handleSubmission = async () => {
+    if (!job) return;
+    setIsSubmitting(true);
+    try {
+      const MOCK_STUDENT_ID = "002";
+      const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/jobs/${job.id}/submit`, {
+        method: "POST"
+      });
+      
+      if (!response.ok) throw new Error("Submission failed");
+      
+      // Optimistic UI update
+      setJob({ ...job, status: "review" });
+    } catch (error) {
+      console.error(error);
+      alert("Failed to submit deliverables.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const formatDeadline = (dateString: string) => {
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(dateString));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+      </div>
+    );
+  }
+
+  if (!job) return null;
+
+  // Derive UI state from database status
+  const isSubmitted = job.status === "review" || job.status === "completed";
 
   return (
     <main ref={contentRef} className="flex-1 p-6 lg:p-10 overflow-y-auto w-full max-w-6xl mx-auto">
@@ -42,15 +103,15 @@ export default function WorkspaceDetail() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <span className={`flex h-3 w-3 rounded-full ${isSubmitted ? 'bg-teal-500' : 'bg-amber-500'}`}></span>
-              <h1 className="text-3xl font-extrabold tracking-tight">Instagram Reels (Set of 3)</h1>
+              <h1 className="text-3xl font-extrabold tracking-tight">{job.title}</h1>
             </div>
             <p className="text-sm font-medium text-zinc-500 ml-6">
-              Client: <span className="font-bold text-zinc-700 dark:text-zinc-300">Aethon Grid</span> • Deadline: Tomorrow, 5:00 PM
+              Client: <span className="font-bold text-zinc-700 dark:text-zinc-300">{job.client}</span> • Deadline: {formatDeadline(job.deadline)}
             </p>
           </div>
           <div className="text-right hidden md:block">
             <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Guaranteed Escrow</p>
-            <p className="text-2xl font-black text-teal-700 dark:text-teal-400">₹1,500</p>
+            <p className="text-2xl font-black text-teal-700 dark:text-teal-400">₹{job.escrow_amount.toLocaleString()}</p>
           </div>
         </div>
       </div>
@@ -73,19 +134,18 @@ export default function WorkspaceDetail() {
                 </div>
                 <h3 className="font-bold text-teal-900 dark:text-teal-100 mb-2">Files Submitted Successfully</h3>
                 <p className="text-sm font-medium text-teal-700 dark:text-teal-300 max-w-sm mx-auto">
-                  Aethon Grid has been notified. The ₹1,500 escrow will be released upon their digital sign-off.
+                  {job.client} has been notified. The ₹{job.escrow_amount.toLocaleString()} escrow will be released upon their digital sign-off.
                 </p>
                 
-                {/* Mock Uploaded File */}
+                {/* Mock Uploaded File (In a full app, this would map over actual uploaded file records) */}
                 <div className="mt-6 flex items-center justify-between rounded-xl border border-teal-200/50 bg-white p-3 text-left shadow-sm dark:border-teal-800/50 dark:bg-zinc-950">
                   <div className="flex items-center gap-3">
                     <svg className="h-8 w-8 text-rose-500" fill="currentColor" viewBox="0 0 24 24"><path d="M4 2h12l6 6v14a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2zm11 2H4v16h16V9h-5V4zm-1 9v2H8v-2h6zm2-4v2H8V9h8z"/></svg>
                     <div>
-                      <p className="text-sm font-bold text-zinc-900 dark:text-white">Cafe_Reels_Final_Export.zip</p>
-                      <p className="text-xs text-zinc-500 font-medium">Uploaded 2 mins ago • 245 MB</p>
+                      <p className="text-sm font-bold text-zinc-900 dark:text-white">Delivery_Final_Export.zip</p>
+                      <p className="text-xs text-zinc-500 font-medium">Uploaded successfully</p>
                     </div>
                   </div>
-                  <button className="text-sm font-bold text-zinc-400 hover:text-rose-500 transition-colors">Replace</button>
                 </div>
               </div>
             ) : (
@@ -117,8 +177,8 @@ export default function WorkspaceDetail() {
               <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               Original Client Prompt
             </h3>
-            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 leading-relaxed italic">
-              "Need 3 high-energy Instagram Reels for our new coffee launch. Use the raw footage attached. Style should match Alex Hormozi (bold captions, fast cuts, pop-in graphics). Need it color-graded to match our warm brand aesthetic."
+            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 leading-relaxed italic whitespace-pre-wrap">
+              "{job.prompt_text}"
             </p>
           </div>
 
@@ -141,9 +201,10 @@ export default function WorkspaceDetail() {
               {!isSubmitted && (
                 <button 
                   onClick={handleSubmission}
-                  className="w-full rounded-xl bg-teal-500 py-3.5 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:shadow-lg hover:shadow-teal-500/25"
+                  disabled={isSubmitting}
+                  className="w-full flex justify-center items-center rounded-xl bg-teal-500 py-3.5 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:shadow-lg hover:shadow-teal-500/25 disabled:opacity-75 disabled:hover:scale-100"
                 >
-                  Submit Deliverables
+                  {isSubmitting ? 'Submitting...' : 'Submit Deliverables'}
                 </button>
               )}
             </div>

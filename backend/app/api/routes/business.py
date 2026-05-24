@@ -1,14 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List
+from typing import List, Optional
+import stripe
+import os
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.schema import Job, JobStatus, User
 from app.schemas.dashboard import BusinessDashboardResponse, BusinessStats, JobSummary
 from app.schemas.job import JobCreate, JobResponse, JobDetailResponse, PipelineJob, AutomationResponse
+from app.schemas.profile import ProfileUpdatePayload
 
 router = APIRouter()
+
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_mock")
+
+class PaymentMethodItem(BaseModel):
+    id: str
+    brand: str
+    last4: str
+    exp_month: int
+    exp_year: int
+    is_default: bool
+
+class InvoiceItem(BaseModel):
+    id: str
+    title: str
+    date: str
+    amount: float
+
+class BusinessBillingResponse(BaseModel):
+    active_escrow: float
+    active_jobs_count: int
+    payment_methods: List[PaymentMethodItem]
+    recent_invoices: List[InvoiceItem]
 
 @router.get("/{client_id}/dashboard", response_model=BusinessDashboardResponse)
 def get_business_dashboard(client_id: str, db: Session = Depends(get_db)):
@@ -141,17 +167,19 @@ def get_pipeline(client_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{client_id}/jobs/{job_id}/signoff")
 def signoff_job(client_id: str, job_id: str, db: Session = Depends(get_db)):
-    """
-    Triggers the digital sign-off and releases the escrow.
-    """
     job = db.query(Job).filter(Job.id == job_id, Job.client_id == client_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # Update the state machine to completed
+    # 1. Complete the job
     job.status = JobStatus.completed
-    db.commit()
     
+    # 2. NEW: Transfer the escrow amount to the student's wallet
+    if job.assigned_student:
+        current_balance = getattr(job.assigned_student, 'wallet_balance', 0.0)
+        job.assigned_student.wallet_balance = current_balance + job.escrow_amount
+        
+    db.commit()
     return {"status": "success", "message": "Escrow released successfully"}
 
 @router.get("/{client_id}/automations", response_model=List[AutomationResponse])
@@ -193,3 +221,128 @@ def toggle_automation(client_id: str, job_id: str, db: Session = Depends(get_db)
     db.commit()
     
     return {"status": "success", "is_cron_active": job.is_cron_active}
+
+@router.get("/{client_id}/profile")
+def get_business_profile(client_id: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == client_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+        
+    # Calculate real platform activity
+    total_jobs = db.query(Job).filter(Job.client_id == client_id).count()
+    active_jobs = db.query(Job).filter(
+        Job.client_id == client_id, 
+        Job.status.in_([JobStatus.collecting_pitches, JobStatus.assigned, JobStatus.in_progress])
+    ).count()
+    
+    recent_jobs = db.query(Job).filter(Job.client_id == client_id).order_by(Job.created_at.desc()).limit(3).all()
+
+    return {
+        "id": user.id,
+        "full_name": user.full_name,
+        "email": user.email,
+        "profile_data": user.profile_data or {},
+        "metrics": {"total_jobs": total_jobs, "active_jobs": active_jobs},
+        "recent_jobs": [{"id": j.id, "title": j.title, "budget": j.escrow_amount, "status": j.status.value if hasattr(j.status, 'value') else j.status} for j in recent_jobs]
+    }
+
+@router.patch("/{client_id}/profile")
+def update_business_profile(client_id: str, payload: ProfileUpdatePayload, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == client_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+        
+    if payload.full_name:
+        user.full_name = payload.full_name
+    if payload.profile_data:
+        # Merge existing json with new updates
+        current_data = user.profile_data or {}
+        user.profile_data = {**current_data, **payload.profile_data}
+        
+    db.commit()
+    return {"status": "success"}
+
+@router.get("/{client_id}/billing", response_model=BusinessBillingResponse)
+def get_business_billing(client_id: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == client_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # 1. Calculate Active Escrow (Funds locked in ongoing jobs)
+    active_jobs = db.query(Job).filter(
+        Job.client_id == client_id,
+        Job.status.in_([JobStatus.collecting_pitches, JobStatus.assigned, JobStatus.in_progress, JobStatus.review])
+    ).all()
+    active_escrow = sum(j.escrow_amount for j in active_jobs)
+    
+    # 2. Get Recent Invoices (Completed Jobs act as sign-off receipts)
+    completed_jobs = db.query(Job).filter(
+        Job.client_id == client_id,
+        Job.status == JobStatus.completed
+    ).order_by(Job.created_at.desc()).limit(5).all()
+
+    invoices = [{
+        "id": job.id,
+        "title": job.title,
+        "date": job.created_at.strftime("%b %d, %Y"),
+        "amount": job.escrow_amount
+    } for job in completed_jobs]
+
+    # 3. Fetch Vaulted Payment Methods from Stripe
+    payment_methods = []
+    if user.stripe_customer_id:
+        try:
+            # Fetch the customer to find out which card is the default
+            customer = stripe.Customer.retrieve(user.stripe_customer_id)
+            default_pm = customer.invoice_settings.default_payment_method
+
+            # List the actual cards
+            pms = stripe.PaymentMethod.list(
+                customer=user.stripe_customer_id,
+                type="card",
+                limit=3
+            )
+            for pm in pms.data:
+                payment_methods.append({
+                    "id": pm.id,
+                    "brand": pm.card.brand.upper(),
+                    "last4": pm.card.last4,
+                    "exp_month": pm.card.exp_month,
+                    "exp_year": pm.card.exp_year,
+                    "is_default": pm.id == default_pm
+                })
+        except Exception as e:
+            print(f"Stripe error: {e}")
+
+    return {
+        "active_escrow": active_escrow,
+        "active_jobs_count": len(active_jobs),
+        "payment_methods": payment_methods,
+        "recent_invoices": invoices
+    }
+
+@router.post("/{client_id}/stripe/portal")
+def create_customer_portal(client_id: str, db: Session = Depends(get_db)):
+    """Generates a secure Stripe Customer Portal session to manage cards."""
+    user = db.query(User).filter(User.id == client_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    try:
+        # If the SME doesn't have a Stripe Customer ID yet, create one on the fly
+        if not user.stripe_customer_id:
+            customer = stripe.Customer.create(
+                email=user.email,
+                name=user.full_name
+            )
+            user.stripe_customer_id = customer.id
+            db.commit()
+
+        # Create the portal session and tell it where to redirect back to
+        session = stripe.billing_portal.Session.create(
+            customer=user.stripe_customer_id,
+            return_url="http://localhost:3000/business/billing"
+        )
+        return {"url": session.url}
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
