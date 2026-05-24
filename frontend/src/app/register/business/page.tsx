@@ -52,14 +52,15 @@ export default function BusinessRegister() {
     setIsLoading(true);
 
     try {
+      // Security Practice: Trim inputs to normalize data
       const response = await fetch("http://127.0.0.1:8000/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          email: formData.email,
-          company_name: formData.companyName,
+          first_name: formData.firstName.trim(),
+          last_name: formData.lastName.trim(),
+          email: formData.email.trim(),
+          company_name: formData.companyName.trim(),
           password: password,
           role: "sme"
         })
@@ -69,9 +70,16 @@ export default function BusinessRegister() {
 
       if (!response.ok) throw new Error(data.detail || "Registration failed");
 
-      // In a real app, you would save the returned data.user_id to a session/cookie here
-      alert("Account created successfully!");
-      router.push("/business/dashboard"); // Redirect to SME dashboard
+      // Security & State Sync: Log the user in immediately
+      localStorage.setItem("user_id", data.user_id);
+      localStorage.setItem("role", data.role);
+      localStorage.setItem("full_name", data.full_name);
+      localStorage.setItem("email", data.email);
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+      }
+
+      router.push("/business/dashboard"); 
 
     } catch (err: any) {
       setError(err.message);

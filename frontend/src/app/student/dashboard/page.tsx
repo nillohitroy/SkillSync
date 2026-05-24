@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface JobSummary {
   id: string;
@@ -23,19 +24,52 @@ interface StudentDashboardData {
 
 export default function StudentDashboard() {
   const contentRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   
   const [data, setData] = useState<StudentDashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Access Control States
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [isWrongRole, setIsWrongRole] = useState(false);
 
   useEffect(() => {
+    // 1. Client-side Authentication Check
+    const userId = localStorage.getItem("user_id");
+    const role = localStorage.getItem("role");
+    const token = localStorage.getItem("token"); // Prepare for when you add JWT
+
+    if (!userId) {
+      setIsUnauthorized(true);
+      setIsLoading(false);
+      return;
+    }
+
+    if (role !== "student") {
+      setIsWrongRole(true);
+      setIsLoading(false);
+      return;
+    }
+
+    // 2. Fetch User-Specific Data
     const fetchDashboard = async () => {
       try {
-        // IMPORTANT: Replace with a mock Student UUID from your database
-        const MOCK_STUDENT_ID = "002"; 
+        const response = await fetch(`http://127.0.0.1:8000/api/student/${userId}/dashboard`, {
+          headers: {
+            "Content-Type": "application/json",
+            // Inject token here once your backend login route issues one
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          }
+        });
         
-        const response = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/dashboard`);
-        if (!response.ok) throw new Error("Failed to load dashboard data");
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            setIsUnauthorized(true);
+            return;
+          }
+          throw new Error("Failed to load dashboard data");
+        }
         
         const json = await response.json();
         setData(json);
@@ -50,7 +84,7 @@ export default function StudentDashboard() {
   }, []);
 
   useEffect(() => {
-    if (isLoading || !contentRef.current) return;
+    if (isLoading || isUnauthorized || isWrongRole || !contentRef.current) return;
     
     createTimeline().add(contentRef.current.children, {
       opacity: [0, 1],
@@ -59,8 +93,37 @@ export default function StudentDashboard() {
       ease: "outExpo",
       delay: (el: any, i: number) => i * 100,
     }, 100);
-  }, [isLoading]);
+  }, [isLoading, isUnauthorized, isWrongRole]);
 
+  // --- UI FOR RESTRICTED ACCESS ---
+  if (isUnauthorized) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-10 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 max-w-md">
+          <svg className="mx-auto h-12 w-12 text-rose-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">Authentication Required</h2>
+          <p className="text-sm text-zinc-500 mb-6">You must be logged in to view your execution dashboard.</p>
+          <div className="flex flex-col gap-3">
+            <Link href="/login" className="w-full rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-teal-600">Log In</Link>
+            <Link href="/register" className="w-full rounded-lg border border-zinc-200 bg-transparent px-4 py-2.5 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">Create an Account</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isWrongRole) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <h1 className="text-6xl font-black text-zinc-900 dark:text-zinc-50 mb-4">404</h1>
+        <h2 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">Page Not Found</h2>
+        <p className="text-sm text-zinc-500 mb-6 max-w-md">The page you are looking for does not exist, or you are logged in as a Business and trying to access the Student Workspace.</p>
+        <Link href="/business/dashboard" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Go to My Dashboard</Link>
+      </div>
+    );
+  }
+
+  // --- NORMAL LOADING & ERROR STATES ---
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
@@ -81,40 +144,24 @@ export default function StudentDashboard() {
   const nextTierTarget = 1000;
   const xpPercentage = Math.min((data.xp_points / nextTierTarget) * 100, 100);
   
-  // FIX: Explicitly map the full Tailwind classes so the purge engine doesn't delete them
   const getTierStyles = (tier: string) => {
-    if (tier === 'gold') return {
-      text: "text-yellow-600 dark:text-yellow-400",
-      bg: "bg-yellow-500",
-      glow: "shadow-[0_0_15px_rgba(234,179,8,0.5)]"
-    };
-    if (tier === 'silver') return {
-      text: "text-zinc-600 dark:text-zinc-400",
-      bg: "bg-zinc-400",
-      glow: "shadow-[0_0_15px_rgba(161,161,170,0.5)]"
-    };
-    return { // Default to Bronze
-      text: "text-amber-600 dark:text-amber-500",
-      bg: "bg-amber-500",
-      glow: "shadow-[0_0_15px_rgba(245,158,11,0.5)]"
-    };
+    if (tier === 'gold') return { text: "text-yellow-600 dark:text-yellow-400", bg: "bg-yellow-500", glow: "shadow-[0_0_15px_rgba(234,179,8,0.5)]" };
+    if (tier === 'silver') return { text: "text-zinc-600 dark:text-zinc-400", bg: "bg-zinc-400", glow: "shadow-[0_0_15px_rgba(161,161,170,0.5)]" };
+    return { text: "text-amber-600 dark:text-amber-500", bg: "bg-amber-500", glow: "shadow-[0_0_15px_rgba(245,158,11,0.5)]" };
   };
 
   const tierStyles = getTierStyles(data.trust_tier);
 
+  // --- MAIN DASHBOARD RENDER ---
   return (
     <main ref={contentRef} className="flex-1 p-6 lg:p-10 overflow-y-auto w-full max-w-7xl mx-auto">
-      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 opacity-0">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Welcome back, {data.full_name.split(' ')[0]}</h1>
           <p className="text-sm font-medium text-zinc-500 mt-1">Ready to execute? Here is your network status.</p>
         </div>
-        <Link 
-          href="/student/market" 
-          className="mt-4 sm:mt-0 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
+        <Link href="/student/market" className="mt-4 sm:mt-0 inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2-2v10a2 2 0 002 2z" /></svg>
           Browse Job Market
         </Link>
@@ -122,13 +169,11 @@ export default function StudentDashboard() {
 
       {/* Gamified Trust & Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 opacity-0">
-        
         {/* Trust Tier Card */}
         <div className="md:col-span-2 rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/50">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                {/* FIX: Applied exact background and dynamic glow */}
                 <div className={`h-4 w-4 rounded-full ${tierStyles.bg} ${tierStyles.glow}`}></div>
                 <h3 className={`text-sm font-bold uppercase tracking-wider capitalize ${tierStyles.text}`}>
                   {data.trust_tier} Tier
@@ -144,11 +189,7 @@ export default function StudentDashboard() {
                 <span>{data.trust_tier === 'bronze' ? 'Silver' : 'Gold'}</span>
               </div>
               <div className="w-full bg-zinc-100 rounded-full h-3 dark:bg-zinc-800 overflow-hidden">
-                {/* FIX: Applied exact background to the progress bar */}
-                <div 
-                  className={`h-3 rounded-full transition-all duration-1000 ${tierStyles.bg}`} 
-                  style={{ width: `${xpPercentage}%` }}
-                ></div>
+                <div className={`h-3 rounded-full transition-all duration-1000 ${tierStyles.bg}`} style={{ width: `${xpPercentage}%` }}></div>
               </div>
             </div>
           </div>
@@ -161,11 +202,9 @@ export default function StudentDashboard() {
           <p className="text-4xl font-black text-teal-900 dark:text-white mb-2">₹{data.pending_escrow.toLocaleString()}</p>
           <p className="text-sm font-medium text-teal-700 dark:text-teal-400">Locked in smart contracts</p>
         </div>
-
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 opacity-0">
-        
         {/* Active Workspace */}
         <div className="space-y-4">
           <h2 className="text-lg font-bold flex items-center gap-2">
@@ -222,10 +261,7 @@ export default function StudentDashboard() {
                       <span className="text-xs font-medium text-zinc-500 capitalize">₹{job.escrow_amount.toLocaleString()} • {job.category}</span>
                     </div>
                   </div>
-                  <Link 
-                    href={`/student/market/${job.id}`}
-                    className="shrink-0 rounded-lg bg-teal-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-teal-500"
-                  >
+                  <Link href={`/student/market/${job.id}`} className="shrink-0 rounded-lg bg-teal-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-teal-500">
                     Draft Pitch
                   </Link>
                 </div>
@@ -237,7 +273,6 @@ export default function StudentDashboard() {
             </Link>
           </div>
         </div>
-
       </div>
     </main>
   );

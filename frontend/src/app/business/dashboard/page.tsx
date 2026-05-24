@@ -5,7 +5,6 @@ import { createTimeline } from "animejs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-// Define TypeScript interfaces mapping to your FastAPI Pydantic schemas
 interface BusinessStats {
   total_active_volume: number;
   awaiting_signoff: number;
@@ -34,15 +33,45 @@ export default function BusinessDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Fetch data from FastAPI
+  // Access Control States
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [isWrongRole, setIsWrongRole] = useState(false);
+
   useEffect(() => {
+    // 1. Client-side Authentication Check
+    const userId = localStorage.getItem("user_id");
+    const role = localStorage.getItem("role");
+    const token = localStorage.getItem("token");
+
+    if (!userId) {
+      setIsUnauthorized(true);
+      setIsLoading(false);
+      return;
+    }
+
+    if (role !== "sme") {
+      setIsWrongRole(true);
+      setIsLoading(false);
+      return;
+    }
+
+    // 2. Fetch User-Specific Data
     const fetchDashboard = async () => {
       try {
-        // Using the mock ID we established earlier
-        const MOCK_CLIENT_ID = "001";
+        const response = await fetch(`http://127.0.0.1:8000/api/business/${userId}/dashboard`, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { "Authorization": `Bearer ${token}` } : {})
+          }
+        });
         
-        const response = await fetch(`http://127.0.0.1:8000/api/business/${MOCK_CLIENT_ID}/dashboard`);
-        if (!response.ok) throw new Error("Failed to load dashboard data");
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            setIsUnauthorized(true);
+            return;
+          }
+          throw new Error("Failed to load dashboard data");
+        }
         
         const json = await response.json();
         setData(json);
@@ -56,9 +85,8 @@ export default function BusinessDashboard() {
     fetchDashboard();
   }, []);
 
-  // 2. Trigger Anime.js only after data has loaded
   useEffect(() => {
-    if (isLoading || !contentRef.current) return;
+    if (isLoading || isUnauthorized || isWrongRole || !contentRef.current) return;
     
     createTimeline().add(contentRef.current.children, {
       opacity: [0, 1],
@@ -67,33 +95,52 @@ export default function BusinessDashboard() {
       ease: "outExpo",
       delay: (el: any, i: number) => i * 100,
     }, 100);
-  }, [isLoading]);
+  }, [isLoading, isUnauthorized, isWrongRole]);
 
-  // Helper to map backend status to frontend UI colors and text
   const getStatusUI = (status: string) => {
     switch (status) {
-      case 'collecting_pitches': 
-        return { color: 'bg-rose-500', label: 'Collecting Pitches', action: 'Review Pitches' };
-      case 'assigned': 
-        return { color: 'bg-blue-500', label: 'Assigned', action: 'View Workspace' };
-      case 'in_progress': 
-        return { color: 'bg-amber-500', label: 'In Progress', action: 'Track Progress' };
-      case 'review': 
-        return { color: 'bg-teal-500', label: 'Awaiting Sign-off', action: 'Review Draft' };
-      case 'completed': 
-        return { color: 'bg-zinc-500', label: 'Completed', action: 'View Invoice' };
-      default: 
-        return { color: 'bg-zinc-300', label: status, action: 'View Details' };
+      case 'collecting_pitches': return { color: 'bg-rose-500', label: 'Collecting Pitches', action: 'Review Pitches' };
+      case 'assigned': return { color: 'bg-blue-500', label: 'Assigned', action: 'View Workspace' };
+      case 'in_progress': return { color: 'bg-amber-500', label: 'In Progress', action: 'Track Progress' };
+      case 'review': return { color: 'bg-teal-500', label: 'Awaiting Sign-off', action: 'Review Draft' };
+      case 'completed': return { color: 'bg-zinc-500', label: 'Completed', action: 'View Invoice' };
+      default: return { color: 'bg-zinc-300', label: status, action: 'View Details' };
     }
   };
 
+  // --- UI FOR RESTRICTED ACCESS ---
+  if (isUnauthorized) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <div className="rounded-2xl border border-zinc-200 bg-white p-10 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 max-w-md">
+          <svg className="mx-auto h-12 w-12 text-rose-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50 mb-2">Authentication Required</h2>
+          <p className="text-sm text-zinc-500 mb-6">You must be logged in to view your business dashboard.</p>
+          <div className="flex flex-col gap-3">
+            <Link href="/login" className="w-full rounded-lg bg-teal-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-teal-600">Log In</Link>
+            <Link href="/register" className="w-full rounded-lg border border-zinc-200 bg-transparent px-4 py-2.5 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">Create an Account</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isWrongRole) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <h1 className="text-6xl font-black text-zinc-900 dark:text-zinc-50 mb-4">404</h1>
+        <h2 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">Page Not Found</h2>
+        <p className="text-sm text-zinc-500 mb-6 max-w-md">The page you are looking for does not exist, or you are logged in as a Student and trying to access the SME Command Center.</p>
+        <Link href="/student/dashboard" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">Go to My Dashboard</Link>
+      </div>
+    );
+  }
+
+  // --- NORMAL LOADING & ERROR STATES ---
   if (isLoading) {
     return (
       <div className="flex flex-1 items-center justify-center p-6">
-        <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
+        <svg className="animate-spin h-8 w-8 text-teal-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
       </div>
     );
   }
@@ -106,30 +153,26 @@ export default function BusinessDashboard() {
     );
   }
 
+  // --- MAIN DASHBOARD RENDER ---
   return (
     <main ref={contentRef} className="flex-1 p-6 lg:p-10 overflow-y-auto">
-      
       {/* Header & CTA */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 opacity-0">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Dashboard</h1>
           <p className="text-sm font-medium text-zinc-500 mt-1">Here is what is happening in your execution pipeline.</p>
         </div>
-        <Link 
-          href="/business/jobs/create" 
-          className="mt-4 sm:mt-0 inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-teal-500 hover:shadow-lg hover:shadow-teal-500/25"
-        >
+        <Link href="/business/jobs/create" className="mt-4 sm:mt-0 inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-teal-500 hover:shadow-lg hover:shadow-teal-500/25">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
           Post New Task
         </Link>
       </div>
 
-      {/* Metrics Grid mapped to FastAPI payload */}
+      {/* Metrics Grid */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3 mb-10 opacity-0">
-        
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/50">
           <div className="flex items-center gap-3 text-zinc-500 dark:text-zinc-400 mb-4">
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             <h3 className="text-sm font-bold uppercase tracking-wider">Active Tasks</h3>
           </div>
           <div className="flex items-end gap-3">
@@ -162,7 +205,6 @@ export default function BusinessDashboard() {
             <span className="text-sm font-medium text-teal-600 dark:text-teal-400 mb-1">Secured Funds</span>
           </div>
         </div>
-
       </div>
 
       {/* Active Pipeline Preview */}
@@ -190,14 +232,7 @@ export default function BusinessDashboard() {
                     </p>
                   </div>
                   <div className="w-full sm:w-auto">
-                    <button 
-                      onClick={() => router.push(`/business/jobs/${job.id}`)}
-                      className={`w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-bold transition-colors ${
-                        job.status === 'review' || job.status === 'collecting_pitches'
-                          ? 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200' 
-                          : 'border border-zinc-200 bg-transparent hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800'
-                      }`}
-                    >
+                    <button onClick={() => router.push(`/business/jobs/${job.id}`)} className={`w-full sm:w-auto rounded-lg px-4 py-2 text-sm font-bold transition-colors ${job.status === 'review' || job.status === 'collecting_pitches' ? 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200' : 'border border-zinc-200 bg-transparent hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800'}`}>
                       {statusUI.action}
                     </button>
                   </div>
@@ -207,7 +242,6 @@ export default function BusinessDashboard() {
           </div>
         )}
       </div>
-
     </main>
   );
 }

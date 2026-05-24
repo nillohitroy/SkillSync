@@ -2,20 +2,29 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import UserDropdown from "@/components/UserDropdown";
 
 export default function Navbar() {
   const [isDark, setIsDark] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Safely handle theme initialization on the client to prevent hydration mismatch
+  // Safely handle theme and auth initialization on the client
   useEffect(() => {
     setMounted(true);
+    
+    // Theme Check
     const savedTheme = localStorage.getItem("theme");
     const systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-
     if (savedTheme === "dark" || (!savedTheme && systemDark)) {
       setIsDark(true);
       document.documentElement.classList.add("dark");
+    }
+
+    // Auth Check
+    const userId = localStorage.getItem("user_id");
+    if (userId) {
+      setIsLoggedIn(true);
     }
   }, []);
 
@@ -69,12 +78,23 @@ export default function Navbar() {
               )}
             </button>
           )}
-          <Link href="/login" className="hidden text-sm font-semibold text-zinc-900 dark:text-zinc-50 md:block hover:text-teal-500 dark:hover:text-teal-400 transition-colors">
-            Log in
-          </Link>
-          <Link href="/register" className="hidden rounded-lg bg-zinc-900 px-5 py-2 text-sm font-bold text-white transition-transform hover:scale-105 dark:bg-zinc-50 dark:text-zinc-900 md:block">
-            Start Executing
-          </Link>
+          
+          {mounted ? (
+            isLoggedIn ? (
+              <UserDropdown />
+            ) : (
+              <>
+                <Link href="/login" className="hidden text-sm font-semibold text-zinc-900 dark:text-zinc-50 md:block hover:text-teal-500 dark:hover:text-teal-400 transition-colors">
+                  Log in
+                </Link>
+                <Link href="/register" className="hidden rounded-lg bg-zinc-900 px-5 py-2 text-sm font-bold text-white transition-transform hover:scale-105 dark:bg-zinc-50 dark:text-zinc-900 md:block">
+                  Start Executing
+                </Link>
+              </>
+            )
+          ) : (
+             <div className="w-24 h-8"></div> /* Placeholder to prevent layout shift before hydration */
+          )}
         </div>
       </div>
     </header>

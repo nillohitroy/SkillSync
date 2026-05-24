@@ -1,37 +1,64 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function StudentProfile() {
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "", bio: "", college: "", experience_level: "", skills: "", preferred_categories: ""
   });
 
-  const MOCK_STUDENT_ID = "002";
-
   const fetchProfile = async () => {
-    const res = await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/profile`);
-    if (res.ok) {
-      const json = await res.json();
-      setData(json);
-      
-      const p = json.profile_data;
-      setFormData({
-        full_name: json.full_name || "",
-        bio: p.bio || "",
-        college: p.college || "",
-        experience_level: p.experience_level || "",
-        skills: Array.isArray(p.skills) ? p.skills.join(", ") : "",
-        preferred_categories: Array.isArray(p.preferred_categories) ? p.preferred_categories.join(", ") : ""
+    // 1. Grab credentials from localStorage
+    const userId = localStorage.getItem("user_id");
+    const token = localStorage.getItem("token");
+
+    // 2. Security Check: Redirect if not logged in
+    if (!userId) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/student/${userId}/profile`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        }
       });
+      
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        
+        const p = json.profile_data || {};
+        setFormData({
+          full_name: json.full_name || "",
+          bio: p.bio || "",
+          college: p.college || "",
+          experience_level: p.experience_level || "",
+          skills: Array.isArray(p.skills) ? p.skills.join(", ") : "",
+          preferred_categories: Array.isArray(p.preferred_categories) ? p.preferred_categories.join(", ") : ""
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch profile", error);
     }
   };
 
-  useEffect(() => { fetchProfile(); }, []);
+  useEffect(() => { 
+    fetchProfile(); 
+  }, []);
 
   const handleSave = async () => {
+    const userId = localStorage.getItem("user_id");
+    const token = localStorage.getItem("token");
+
+    if (!userId) return;
+
     const payload = {
       full_name: formData.full_name,
       profile_data: {
@@ -43,17 +70,38 @@ export default function StudentProfile() {
       }
     };
 
-    await fetch(`http://127.0.0.1:8000/api/student/${MOCK_STUDENT_ID}/profile`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    
-    setIsEditing(false);
-    fetchProfile();
+    try {
+      await fetch(`http://127.0.0.1:8000/api/student/${userId}/profile`, {
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      setIsEditing(false);
+      // Re-fetch to update UI
+      fetchProfile();
+      
+      // Update local storage so the Navbar dropdown updates instantly
+      localStorage.setItem("full_name", formData.full_name);
+    } catch (error) {
+      console.error("Failed to save profile", error);
+    }
   };
 
-  if (!data) return <div className="p-10 text-center animate-pulse">Loading profile...</div>;
+  if (!data) return <div className="p-10 text-center animate-pulse text-zinc-500 font-medium">Loading profile data...</div>;
+
+  // Helper function to extract initials
+  const getInitials = (name: string) => {
+    if (!name) return "";
+    const names = name.trim().split(" ");
+    if (names.length >= 2) {
+      return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-6 space-y-6 w-full relative">
@@ -104,15 +152,15 @@ export default function StudentProfile() {
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
           <div className="flex items-center gap-6">
             <div className="flex h-24 w-24 items-center justify-center rounded-full bg-amber-100 text-3xl font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-400">
-              {data.full_name.substring(0, 2).toUpperCase()}
+              {getInitials(data.full_name)}
             </div>
             <div>
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{data.full_name}</h1>
-              <p className="text-zinc-500 dark:text-zinc-400 font-medium">{data.profile_data.bio || "Student Freelancer"}</p>
+              <p className="text-zinc-500 dark:text-zinc-400 font-medium">{data.profile_data?.bio || "Student Freelancer"}</p>
               
               <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 capitalize">
                 <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
-                {data.trust_tier} Tier
+                {data.trust_tier || "Bronze"} Tier
               </div>
             </div>
           </div>
@@ -131,12 +179,12 @@ export default function StudentProfile() {
                 <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Verified College</p>
                 <p className="text-sm font-medium text-zinc-900 dark:text-zinc-300 flex items-center gap-2 mt-1">
                   <svg className="h-4 w-4 text-teal-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  {data.profile_data.college || "No college verified"}
+                  {data.profile_data?.college || "No college verified"}
                 </p>
               </div>
               <div>
                 <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Experience Level</p>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-300 mt-1">{data.profile_data.experience_level || "Beginner"}</p>
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-300 mt-1">{data.profile_data?.experience_level || "Beginner"}</p>
               </div>
             </div>
           </div>
@@ -144,7 +192,7 @@ export default function StudentProfile() {
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 mb-4">Skills & Tools</h2>
             <div className="flex flex-wrap gap-2">
-              {(data.profile_data.skills || []).length > 0 ? (
+              {(data.profile_data?.skills || []).length > 0 ? (
                 data.profile_data.skills.map((skill: string) => (
                   <span key={skill} className="rounded-md bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                     {skill}
@@ -159,7 +207,7 @@ export default function StudentProfile() {
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 mb-4">Preferred Categories</h2>
             <div className="flex flex-col gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-              {(data.profile_data.preferred_categories || []).length > 0 ? (
+              {(data.profile_data?.preferred_categories || []).length > 0 ? (
                 data.profile_data.preferred_categories.map((cat: string) => (
                   <span key={cat} className="flex items-center gap-2">✦ {cat}</span>
                 ))
@@ -178,7 +226,7 @@ export default function StudentProfile() {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {data.portfolio.length === 0 ? (
+              {(!data.portfolio || data.portfolio.length === 0) ? (
                 <p className="text-sm text-zinc-500 col-span-2">No completed projects to showcase yet.</p>
               ) : (
                 data.portfolio.map((item: any) => (

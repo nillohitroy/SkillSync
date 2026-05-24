@@ -1,13 +1,53 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserDropdown from "@/components/UserDropdown";
 
 export default function BusinessLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
 
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // --- GATEKEEPER LOGIC ---
+  useEffect(() => {
+    const role = localStorage.getItem("role");
+    
+    if (role !== "sme") {
+      setIsAuthorized(false);
+      setIsLoading(false);
+    } else {
+      setIsAuthorized(true);
+      setIsLoading(false);
+    }
+  }, []);
+
+  // 1. Show a blank screen while checking credentials
+  if (isLoading) {
+    return <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center" />;
+  }
+
+  // 2. Show 404 / Unauthorized if they fail the role check
+  if (!isAuthorized) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-6 text-center transition-colors duration-300">
+        <h1 className="text-6xl font-black text-zinc-900 dark:text-zinc-50 mb-4">404</h1>
+        <h2 className="text-xl font-bold text-zinc-700 dark:text-zinc-300 mb-2">Access Denied</h2>
+        <p className="text-sm text-zinc-500 mb-6 max-w-md">
+          The page you are looking for does not exist, or you do not have business permissions to view this command center.
+        </p>
+        <Link href="/login" className="rounded-lg bg-zinc-900 px-6 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200">
+          Return to Login
+        </Link>
+      </div>
+    );
+  }
+
+  // 3. NORMAL LAYOUT RENDER (If Authorized)
   const navItems = [
     { name: "Dashboard", href: "/business/dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
     { name: "My Jobs", href: "/business/jobs", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
@@ -34,7 +74,7 @@ export default function BusinessLayout({ children }: { children: React.ReactNode
 
         <nav className="flex-1 space-y-1 p-4">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname.startsWith(item.href);
             return (
               <Link 
                 key={item.name} 
@@ -56,35 +96,25 @@ export default function BusinessLayout({ children }: { children: React.ReactNode
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Header */}
         <header className="flex h-16 items-center justify-between border-b border-zinc-200 bg-white/50 px-6 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/50 sticky top-0 z-40">
-          <div className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-            Overview / <span className="text-zinc-900 dark:text-zinc-50">Command Center</span>
+          <div className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 truncate">
+            Overview / <span className="text-zinc-900 dark:text-zinc-50 capitalize">{pathname.split('/').pop() || 'Command Center'}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <ThemeToggle />
-
-            <button className="relative rounded-full p-2 text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 transition-colors">
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 border border-white dark:border-zinc-900"></span>
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-            </button>
-
-            {/* Business Dropdown */}
+            
+            {/* Dynamic Business Dropdown */}
             <div className="ml-2 border-l border-zinc-200 pl-4 dark:border-zinc-800">
-              <UserDropdown 
-                name="Aethon Grid" 
-                email="founder@aethongrid.com" 
-                initials="AG" 
-                avatarColor="bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-400"
-              />
+              <UserDropdown />
             </div>
           </div>
         </header>
         
-        {/* Force re-render on route change to fix Anime.js back-button freezing */}
-        <div key={pathname} className="flex-1 flex flex-col h-full">
+        {/* Protected Child Pages Render Here */}
+        <div key={pathname} className="flex-1 flex flex-col h-full w-full">
           {children}
         </div>
       </div>

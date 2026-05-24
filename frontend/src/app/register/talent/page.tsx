@@ -50,15 +50,16 @@ export default function TalentRegister() {
     setIsLoading(true);
 
     try {
+      // Security Practice: Trim invisible spaces from inputs before sending
       const response = await fetch("http://127.0.0.1:8000/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          email: formData.email,
-          college: formData.college,
-          password: password,
+          first_name: formData.firstName.trim(),
+          last_name: formData.lastName.trim(),
+          email: formData.email.trim(),
+          college: formData.college.trim(),
+          password: password, // Never trim passwords
           role: "student"
         })
       });
@@ -67,8 +68,16 @@ export default function TalentRegister() {
 
       if (!response.ok) throw new Error(data.detail || "Registration failed");
 
-      alert("Student profile created successfully!");
-      router.push("/student/dashboard"); // Redirect to Student dashboard
+      // Security & State Sync: Log the user in immediately
+      localStorage.setItem("user_id", data.user_id);
+      localStorage.setItem("role", data.role);
+      localStorage.setItem("full_name", data.full_name);
+      localStorage.setItem("email", data.email);
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+      }
+
+      router.push("/student/dashboard");
 
     } catch (err: any) {
       setError(err.message);

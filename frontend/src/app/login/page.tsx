@@ -4,14 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Navbar from "@/components/Navbar";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const formRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   
   // State for inputs and password visibility
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  
+  // Form submission states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Entrance Animation
   useEffect(() => {
@@ -23,6 +29,47 @@ export default function LoginPage() {
       ease: "outExpo",
     }, 100);
   }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Send login request to FastAPI backend
+      const response = await fetch("http://127.0.0.1:8000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Invalid email or password");
+      }
+
+      // Store auth state in localStorage
+      localStorage.setItem("user_id", data.user_id);
+      localStorage.setItem("role", data.role);
+      localStorage.setItem("full_name", data.full_name);
+      localStorage.setItem("email", data.email);
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+      }
+
+      // Route based on role
+      if (data.role === "sme") {
+        router.push("/business/dashboard");
+      } else {
+        router.push("/student/dashboard");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Reusable Eye Icon Component
   const EyeIcon = ({ show }: { show: boolean }) => (
@@ -52,14 +99,21 @@ export default function LoginPage() {
           </div>
 
           {/* Login Form */}
-          <form className="space-y-5 rounded-3xl border border-zinc-200 bg-white p-8 shadow-xl shadow-zinc-200/50 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/50">
+          <form onSubmit={handleLogin} className="space-y-5 rounded-3xl border border-zinc-200 bg-white p-8 shadow-xl shadow-zinc-200/50 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/50">
             
+            {error && (
+              <div className="rounded-xl bg-rose-50 p-4 text-sm font-bold text-rose-600 border border-rose-200 dark:bg-rose-900/20 dark:border-rose-900/50 dark:text-rose-400">
+                {error}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Email Address</label>
               <input 
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
                 className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                 placeholder="name@company.com"
               />
@@ -77,6 +131,7 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  required
                   className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 pr-12 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                   placeholder="••••••••"
                 />
@@ -90,8 +145,16 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button type="button" className="mt-6 w-full rounded-xl bg-zinc-900 py-3.5 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:shadow-lg dark:bg-zinc-50 dark:text-zinc-900">
-              Sign In
+            <button 
+              type="submit" 
+              disabled={isLoading}
+              className="mt-6 flex w-full justify-center rounded-xl bg-zinc-900 py-3.5 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:shadow-lg disabled:opacity-70 disabled:hover:scale-100 dark:bg-zinc-50 dark:text-zinc-900"
+            >
+              {isLoading ? (
+                <svg className="animate-spin h-5 w-5 text-white dark:text-zinc-900" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              ) : (
+                "Sign In"
+              )}
             </button>
             
           </form>

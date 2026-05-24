@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Navbar from "@/components/Navbar";
 import Link from "next/link";
@@ -10,8 +10,19 @@ export default function LandingPage() {
   const capabilitiesRef = useRef<HTMLDivElement>(null);
   const workflowRef = useRef<HTMLDivElement>(null);
 
-  // Entrance Animations
+  const [mounted, setMounted] = useState(false);
+  const [authData, setAuthData] = useState({ loggedIn: false, role: "" });
+
+  // Entrance Animations & Auth Check
   useEffect(() => {
+    setMounted(true);
+    
+    // Check role access
+    const currentRole = localStorage.getItem("role");
+    if (currentRole) {
+      setAuthData({ loggedIn: true, role: currentRole });
+    }
+
     if (!heroRef.current || !capabilitiesRef.current || !workflowRef.current) return;
 
     const tl = createTimeline();
@@ -62,18 +73,24 @@ export default function LandingPage() {
             </p>
 
             <div className="animate-hero flex flex-col sm:flex-row gap-4 w-full sm:w-auto justify-center">
-              <Link
-                href="/login"
-                className="rounded-xl bg-teal-600 px-8 py-4 text-base font-bold text-white shadow-lg shadow-teal-500/20 transition-all hover:bg-teal-500 hover:shadow-teal-500/40 hover:-translate-y-0.5"
-              >
-                Post Work — It's Free
-              </Link>
-              <Link
-                href="/login"
-                className="rounded-xl border-2 border-zinc-200 bg-zinc-50/50 px-8 py-4 text-base font-bold text-zinc-900 transition-all hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-50 dark:hover:bg-zinc-800"
-              >
-                Apply as Student Talent
-              </Link>
+              {mounted ? (
+                <>
+                  <Link
+                    href={authData.loggedIn ? (authData.role === 'sme' ? '/business/dashboard' : '/student/dashboard') : '/register'}
+                    className="rounded-xl bg-teal-600 px-8 py-4 text-base font-bold text-white shadow-lg shadow-teal-500/20 transition-all hover:bg-teal-500 hover:shadow-teal-500/40 hover:-translate-y-0.5"
+                  >
+                    {authData.loggedIn ? "Go to Dashboard" : "Post Work — It's Free"}
+                  </Link>
+                  <Link
+                    href={authData.loggedIn ? (authData.role === 'sme' ? '/business/jobs/create' : '/student/market') : '/register'}
+                    className="rounded-xl border-2 border-zinc-200 bg-zinc-50/50 px-8 py-4 text-base font-bold text-zinc-900 transition-all hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-50 dark:hover:bg-zinc-800"
+                  >
+                    {authData.loggedIn ? (authData.role === 'sme' ? 'Post a New Task' : 'Browse Job Market') : "Apply as Student Talent"}
+                  </Link>
+                </>
+              ) : (
+                <div className="h-[56px] w-[350px] opacity-0"></div> // Layout placeholder before load
+              )}
             </div>
           </div>
         </main>
