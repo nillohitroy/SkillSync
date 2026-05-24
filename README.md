@@ -93,3 +93,21 @@ STRIPE_SECRET_KEY=your_stripe_test_key
 # Start the FastAPI Server
 uvicorn main:app --reload --port 8000
 ```
+
+### 3. Frontend Setup (Next.js)
+```bash
+# Open a new terminal instance
+cd ../frontend
+
+# Install Node modules
+npm install
+
+# Create a .env.local file
+touch .env.local
+
+# .env.local (Frontend):
+NEXT_PUBLIC_API_URL=[http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+# Start the development server
+npm run dev
+```
