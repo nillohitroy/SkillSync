@@ -4,22 +4,31 @@ import { useEffect, useRef, useState } from "react";
 import { createTimeline } from "animejs";
 import Navbar from "@/components/Navbar";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function TalentRegister() {
   const formRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
-  // State for password logic
+  const [formData, setFormData] = useState({
+    firstName: "", lastName: "", college: "", email: ""
+  });
+
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Real-time validation rules
   const rules = [
     { id: "length", label: "At least 8 characters", valid: password.length >= 8 },
     { id: "upper", label: "One uppercase letter", valid: /[A-Z]/.test(password) },
     { id: "number", label: "One number", valid: /[0-9]/.test(password) },
     { id: "special", label: "One special character", valid: /[^A-Za-z0-9]/.test(password) },
   ];
+
+  const isPasswordValid = rules.every(rule => rule.valid);
 
   useEffect(() => {
     if (!formRef.current) return;
@@ -30,6 +39,43 @@ export default function TalentRegister() {
       ease: "outExpo",
     }, 100);
   }, []);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!isPasswordValid) return setError("Please meet all password requirements.");
+    if (password !== confirmPassword) return setError("Passwords do not match.");
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          email: formData.email,
+          college: formData.college,
+          password: password,
+          role: "student"
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.detail || "Registration failed");
+
+      alert("Student profile created successfully!");
+      router.push("/student/dashboard"); // Redirect to Student dashboard
+
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const EyeIcon = ({ show }: { show: boolean }) => (
     show ? (
@@ -50,20 +96,28 @@ export default function TalentRegister() {
             <p className="text-zinc-600 dark:text-zinc-400 font-medium">Join the execution network and start earning.</p>
           </div>
 
-          <form className="space-y-5 rounded-3xl border border-zinc-200 bg-white p-8 shadow-xl shadow-zinc-200/50 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/50">
+          <form onSubmit={handleRegister} className="space-y-5 rounded-3xl border border-zinc-200 bg-white p-8 shadow-xl shadow-zinc-200/50 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/50">
             
+            {error && (
+              <div className="p-3 text-sm font-bold text-rose-600 bg-rose-50 rounded-xl dark:bg-rose-900/10 dark:text-rose-400">
+                {error}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">First Name</label>
                 <input 
-                  type="text" 
+                  required type="text" 
+                  value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})}
                   className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                 />
               </div>
               <div>
                 <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Last Name</label>
                 <input 
-                  type="text" 
+                  required type="text" 
+                  value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})}
                   className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                 />
               </div>
@@ -72,7 +126,8 @@ export default function TalentRegister() {
             <div>
               <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">College / University</label>
               <input 
-                type="text" 
+                required type="text" 
+                value={formData.college} onChange={e => setFormData({...formData, college: e.target.value})}
                 className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                 placeholder="Enter institution name"
               />
@@ -81,7 +136,8 @@ export default function TalentRegister() {
             <div>
               <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Student Email</label>
               <input 
-                type="email" 
+                required type="email" 
+                value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
                 className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                 placeholder="name@university.edu"
               />
@@ -91,7 +147,7 @@ export default function TalentRegister() {
               <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Password</label>
               <div className="relative">
                 <input 
-                  type={showPassword ? "text" : "password"}
+                  required type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 pr-12 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
@@ -123,7 +179,8 @@ export default function TalentRegister() {
               <label className="block text-sm font-bold text-zinc-700 dark:text-zinc-300 mb-2">Confirm Password</label>
               <div className="relative">
                 <input 
-                  type={showConfirmPassword ? "text" : "password"}
+                  required type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
                   className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 pr-12 text-sm outline-none transition-colors focus:border-teal-500 focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-950 dark:focus:border-teal-500" 
                   placeholder="••••••••"
                 />
@@ -137,8 +194,8 @@ export default function TalentRegister() {
               </div>
             </div>
 
-            <button type="button" className="mt-6 w-full rounded-xl bg-teal-600 py-3.5 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:bg-teal-500 hover:shadow-lg hover:shadow-teal-500/25">
-              Register Profile
+            <button disabled={isLoading} type="submit" className="mt-6 w-full rounded-xl bg-teal-600 py-3.5 text-sm font-bold text-white transition-transform hover:scale-[1.02] hover:bg-teal-500 hover:shadow-lg hover:shadow-teal-500/25 disabled:opacity-75 disabled:hover:scale-100">
+              {isLoading ? "Processing..." : "Register Profile"}
             </button>
             
           </form>

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.api.routes import business, student
+from app.api.routes import business, student, auth
 
 app = FastAPI(title=settings.PROJECT_NAME)
 
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(business.router, prefix="/api/business", tags=["Business"])
 app.include_router(student.router, prefix="/api/student", tags=["Student"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 
 @app.get("/")
 def health_check(db: Session = Depends(get_db)):

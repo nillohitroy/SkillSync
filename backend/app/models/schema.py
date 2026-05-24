@@ -38,10 +38,11 @@ class User(Base):
     # Student specific (Null for SMEs)
     trust_tier: Mapped[TrustTier | None] = mapped_column(Enum(TrustTier), default=TrustTier.bronze)
     xp_points: Mapped[int] = mapped_column(Integer, default=0)
-    wallet_balance: Mapped[float] = mapped_column(Float, server_default="0.0")
+    wallet_balance: Mapped[float] = mapped_column(Float, default=0, server_default="0.0")
     stripe_account_id: Mapped[str | None] = mapped_column(String, nullable=True)
     stripe_customer_id: Mapped[str | None] = mapped_column(String, nullable=True)
     profile_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Relationships
     posted_jobs = relationship("Job", back_populates="client", foreign_keys="Job.client_id")
@@ -77,7 +78,7 @@ class Pitch(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     content: Mapped[str] = mapped_column(Text)
     ai_match_score: Mapped[int] = mapped_column(Integer) # 0-100 score from your custom LLM
-    is_accepted: Mapped[bool] = mapped_column(default=False)
+    is_accepted: Mapped[bool] = mapped_column(Boolean, default=False)
     
     job_id: Mapped[str] = mapped_column(ForeignKey("jobs.id"))
     student_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
