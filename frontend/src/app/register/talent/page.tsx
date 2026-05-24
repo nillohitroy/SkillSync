@@ -52,7 +52,7 @@ export default function TalentRegister() {
     try {
       // Security Practice: Trim invisible spaces from inputs before sending
       const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const response = await fetch("${API_URL}/api/auth/register", {
+      const response = await fetch(`${API_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
